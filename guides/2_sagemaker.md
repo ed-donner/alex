@@ -51,6 +51,16 @@ Edit `terraform.tfvars` and set your AWS region (should match your DEFAULT_AWS_R
 aws_region = "us-east-1"  # Use your DEFAULT_AWS_REGION from .env
 ```
 
+⚠️ **Important for non-US-East-1 regions**:
+If you're deploying to a region other than `us-east-1`, you also need to update the SageMaker image URI in `variables.tf`:
+
+1. Open `terraform/2_sagemaker/variables.tf`
+2. On line 9, find the `sagemaker_image_uri` default value
+3. Replace `us-east-1` with your region (e.g., `ap-southeast-2`)
+4. The line should look like: `"763104351884.dkr.ecr.YOUR-REGION.amazonaws.com/huggingface-pytorch-inference:1.13.1-transformers4.26.0-cpu-py39-ubuntu20.04"`
+
+This is necessary because AWS doesn't allow cross-region ECR image pulls.
+
 ## Step 2: Deploy with Terraform
 
 Now let's deploy the SageMaker infrastructure. With the HuggingFace approach, there's no need to prepare model artifacts - the model will be downloaded automatically from HuggingFace Hub!

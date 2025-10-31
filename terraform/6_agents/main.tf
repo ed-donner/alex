@@ -162,7 +162,9 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
         ]
         Resource = "arn:aws:sagemaker:${var.aws_region}:${data.aws_caller_identity.current.account_id}:endpoint/${var.sagemaker_endpoint}"
       },
-      # Bedrock access for all agents
+       # Bedrock access for all agents
+      # Note: Inference profiles may route to models in different regions,
+      # so we need to allow access to Bedrock in multiple regions
       {
         Effect = "Allow"
         Action = [
@@ -170,8 +172,8 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
           "bedrock:InvokeModelWithResponseStream"
         ]
         Resource = [
-          "arn:aws:bedrock:${var.bedrock_region}::foundation-model/*",
-          "arn:aws:bedrock:${var.bedrock_region}:*:inference-profile/*"
+          "arn:aws:bedrock:*::foundation-model/*",
+          "arn:aws:bedrock:*:*:inference-profile/*"
         ]
       }
     ]

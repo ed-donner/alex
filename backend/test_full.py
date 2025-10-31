@@ -27,7 +27,7 @@ def setup_test_data(db):
             years_to_retirement=25,
             target_allocation={'stocks': 70, 'bonds': 20, 'alternatives': 10}
         )
-        db.users.create(user_data.model_dump())
+        db.users.create(user_data.model_dump(), 'clerk_user_id')
         print(f"  ✓ Created test user: {test_user_id}")
     else:
         print(f"  ✓ Test user exists: {test_user_id}")

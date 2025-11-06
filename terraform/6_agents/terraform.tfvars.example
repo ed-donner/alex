@@ -16,12 +16,16 @@ aurora_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:alex-a
 vector_bucket = "alex-vectors-123456789012"
 
 # Bedrock model configuration
-# Using Amazon Nova Pro model for better reliability
-bedrock_model_id = "us.amazon.nova-pro-v1:0"
+# Using Amazon Nova Pro model for better reliability (direct model ID, not inference profile)
+# IMPORTANT: Use "amazon.nova-pro-v1:0" NOT "us.amazon.nova-pro-v1:0"
+# Direct model IDs stay in your specified region and simplify IAM permissions.
+# Inference profiles (us.amazon.nova-pro-v1:0) route cross-region and can cause authorization errors.
+bedrock_model_id = "amazon.nova-pro-v1:0"
 
-# Bedrock region (us-west-2 has the most models available)
-# Note: This can be different from your Lambda region - cross-region calls work fine
-bedrock_region = "us-west-2"
+# Bedrock region (recommend using same as aws_region to avoid cross-region IAM complexity)
+# Nova Pro is available in us-east-1, us-west-2, eu-west-1, and other major regions
+# Keep this aligned with your aws_region above for simpler IAM configuration
+bedrock_region = "us-east-1"
 
 # SageMaker endpoint name from Part 2
 # Default: alex-embedding-endpoint

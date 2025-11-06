@@ -75,21 +75,83 @@ Read this seminal post by Google DeepMind Senior AI Relation Engineer Philipp Sc
 
 https://www.philschmid.de/context-engineering
 
-## Step 0: Request Additional Bedrock Model Access
+## Step 0: Understanding Bedrock Model Access
 
-Our agents use Amazon's Nova Pro model for improved reliability. Let's ensure you have access:
+Our agents use Amazon's Nova Pro model for improved reliability.
 
-1. Sign in to the AWS Console
-2. Navigate to **Amazon Bedrock**
-3. Switch to **US West (Oregon) us-west-2** region
-4. Click **Model access** in the left sidebar
-5. Click **Manage model access**
-6. Find the **Amazon** section
-7. Check the box for **Amazon Nova Pro**
-8. Click **Request model access**
-9. Wait for approval (usually instant)
+### Automatic Model Access (2024 Update)
 
-**Note**: The agents will use this model cross-region from your deployment region.
+✅ **Good news!** AWS Bedrock now provides automatic access to all serverless foundation models, including Nova Pro. You no longer need to manually request model access through the console.
+
+- All serverless models (including Nova Pro) are automatically enabled for your AWS account
+- No manual approval process required
+- IAM policies control access instead of per-model permissions
+- Use the model catalog and playground to explore available models
+
+For more information, see the [AWS Bedrock documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html).
+
+### Important: Direct Model ID vs Inference Profiles
+
+⚠️ **Critical Configuration Note**
+
+AWS Bedrock offers two ways to reference models:
+
+**1. Direct Model ID** (✅ Recommended for Alex)
+```
+amazon.nova-pro-v1:0
+```
+- Invokes the model directly in your specified region
+- Simpler IAM permissions (single region)
+- Predictable behavior and easier debugging
+- **This is what we use in Alex**
+
+**2. Inference Profile** (⚠️ Advanced use cases only)
+```
+us.amazon.nova-pro-v1:0
+eu.amazon.nova-pro-v1:0
+```
+- Routes requests across multiple regions for load balancing
+- Requires IAM permissions for **multiple regions** (not just your bedrock_region)
+- Can cause authorization errors if IAM policies don't cover all routing regions
+- More complex to configure and debug
+
+**Why Alex Uses Direct Model IDs:**
+
+The inference profile approach can cause this error:
+```
+User: arn:aws:sts::xxx:assumed-role/alex-lambda-agents-role/alex-xxx
+is not authorized to perform: bedrock:InvokeModel on resource:
+arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-pro-v1:0
+```
+
+Even when you set `bedrock_region = "us-east-1"`, the inference profile may route to `us-west-2`, causing authorization failures if your IAM policy only allows `us-east-1`.
+
+By using the direct model ID, all requests stay in your specified region, simplifying IAM configuration.
+
+### Verify Bedrock Access (Optional)
+
+To confirm Bedrock is working in your region, run this test:
+
+```bash
+aws bedrock-runtime invoke-model \
+  --region us-east-1 \
+  --model-id amazon.nova-pro-v1:0 \
+  --body '{"messages":[{"role":"user","content":[{"text":"Hello"}]}],"inferenceConfig":{"maxTokens":10}}' \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/test-response.json
+```
+
+**Expected output:**
+```json
+{
+    "contentType": "application/json"
+}
+```
+
+If you see this, Bedrock is configured correctly! You can also check the response:
+```bash
+cat /tmp/test-response.json
+```
 
 ## Step 1: Configure Environment Variables
 
@@ -323,10 +385,14 @@ aurora_secret_arn = ""
 vector_bucket = "alex-vectors-123456789012"  # Replace with your account ID
 
 # Bedrock model configuration
-bedrock_model_id = "us.amazon.nova-pro-v1:0"  # Amazon Nova Pro model
+# IMPORTANT: Use direct model ID, NOT inference profile
+# ✅ Correct: "amazon.nova-pro-v1:0" (direct model - stays in your region)
+# ❌ Wrong:   "us.amazon.nova-pro-v1:0" (inference profile - routes cross-region)
+bedrock_model_id = "amazon.nova-pro-v1:0"
 
-# Bedrock region (can be different from Lambda region)
-bedrock_region = "us-west-2"
+# Bedrock region (recommend using same as aws_region to simplify IAM)
+# Nova Pro is available in us-east-1, us-west-2, eu-west-1, and other major regions
+bedrock_region = "us-east-1"
 
 # SageMaker endpoint name from Part 2
 sagemaker_endpoint = "alex-embedding-endpoint"

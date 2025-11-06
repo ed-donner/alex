@@ -204,9 +204,9 @@ Before writing any code, check these common issues:
 
 **AWS Permissions Issues** (Most common overall)
 - Missing IAM policies for specific AWS services
-- Region-specific permissions (especially for Bedrock inference profiles)
-- Inference profiles require permissions for MULTIPLE regions
-- **Check**: IAM policies, AWS region settings, Bedrock model access
+- Region-specific permissions (ensure IAM allows Bedrock in your chosen region)
+- Using inference profiles instead of direct model IDs (causes cross-region issues)
+- **Check**: IAM policies, AWS region settings, bedrock_model_id configuration
 
 **Terraform Variables Not Set**
 - Each terraform directory needs its `terraform.tfvars` file configured
@@ -214,26 +214,119 @@ Before writing any code, check these common issues:
 - **Check**: Does `terraform.tfvars` exist? Are all required variables set?
 
 **AWS Region Mismatches**
-- Bedrock models may only be available in specific regions
-- Nova Pro requires inference profiles
-- Cross-region resource access may need models to have been approved in Bedrock in multiple regions
-- **Check**: Region consistency across configuration files
+- Bedrock models are available in major regions (us-east-1, us-west-2, eu-west-1, ap-southeast-1, etc.)
+- Use **direct model IDs** (`amazon.nova-pro-v1:0`) not inference profiles to avoid cross-region routing
+- Ensure `bedrock_region` in terraform.tfvars matches your IAM policy region
+- **Check**: Region consistency in terraform.tfvars, IAM policies, and Lambda environment variables
 
-**Model Access Not Granted**
-- AWS Bedrock requires explicit model access requests
-- Nova Pro is the recommended model (Claude Sonnet has strict rate limits)
-- Access is per-region; inference profiles may require multiple regions to have access
-- **Check**: Bedrock console → Model access
+**Bedrock Model Configuration (2024 Update)**
+- AWS now provides **automatic access** to all serverless models (no manual approval needed)
+- Use **direct model ID** `amazon.nova-pro-v1:0` NOT inference profile `us.amazon.nova-pro-v1:0`
+- Nova Pro is the recommended model (Claude Sonnet has strict rate limits for student projects)
+- **Check**: `bedrock_model_id` in `terraform/6_agents/terraform.tfvars` uses direct model ID
 
 ### 4. **Current Model Strategy**
 
-**Use Nova Pro, not Claude Sonnet**
-- Nova Pro (`us.amazon.nova-pro-v1:0` or `eu.amazon.nova-pro-v1:0`) is the recommended model
-- Requires inference profiles for cross-region access
-- Claude Sonnet has too strict rate limits for this project
-- Students need to request access in AWS Bedrock console, and potentially for multiple regions
+**Use Nova Pro (Direct Model ID), not Claude Sonnet**
+- **Recommended model ID**: `amazon.nova-pro-v1:0` (direct model, NOT inference profile)
+- **Available regions**: us-east-1, us-west-2, eu-west-1, and other major AWS regions
+- **Why not Claude Sonnet**: Too strict rate limits for student projects (causes frequent errors)
+- **Why not inference profiles**: Adds unnecessary complexity and causes cross-region IAM errors
+- **Model access**: Automatic as of 2024 (no manual request needed)
 
-### 5. **Testing Approach**
+**Configuration:**
+```hcl
+# In terraform/6_agents/terraform.tfvars
+bedrock_model_id = "amazon.nova-pro-v1:0"  # ✅ Direct model ID
+bedrock_region = "us-east-1"               # Same as aws_region recommended
+```
+
+### 5. **Bedrock Model Access and Configuration (2024 Update)**
+
+**AWS Has Changed Model Access**
+- As of 2024, Bedrock model access is **automatic** for all serverless models
+- No manual "request access" step needed in the console
+- The old "Model access" management page has been retired
+- IAM policies control access, not per-model permissions
+- All serverless foundation models are enabled by default
+
+**Critical: Inference Profiles vs Direct Model IDs**
+
+⚠️ **Most Common Bedrock Error**: Using inference profile instead of direct model ID
+
+**Symptoms:**
+```
+litellm.APIConnectionError: BedrockException -
+{"Message":"User: arn:aws:sts::xxx:assumed-role/alex-lambda-agents-role/alex-xxx
+is not authorized to perform: bedrock:InvokeModel on resource:
+arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-pro-v1:0
+because no identity-based policy allows the bedrock:InvokeModel action"}
+```
+
+Even though `BEDROCK_REGION=us-east-1` in the Lambda environment, the error shows `us-west-2`.
+
+**Root Cause:**
+1. Inference profiles (`us.amazon.nova-pro-v1:0`) route requests **across multiple regions** for load balancing
+2. Student's IAM policy only grants Bedrock permissions for `us-east-1`
+3. The inference profile routes the request to `us-west-2` (or another region)
+4. Lambda role doesn't have permission for that region → Authorization denied
+
+**The Configuration Issue:**
+```hcl
+# ❌ WRONG - Inference profile (causes cross-region routing)
+bedrock_model_id = "us.amazon.nova-pro-v1:0"
+bedrock_region = "us-east-1"
+```
+
+The `us.` prefix indicates an inference profile, which ignores your `bedrock_region` setting and routes based on AWS's load balancing logic.
+
+**Solution:**
+1. Use **direct model ID** in `terraform/6_agents/terraform.tfvars`:
+   ```hcl
+   # ✅ CORRECT - Direct model ID (stays in specified region)
+   bedrock_model_id = "amazon.nova-pro-v1:0"
+   bedrock_region = "us-east-1"
+   ```
+
+2. Run `terraform apply` in `terraform/6_agents/` to update Lambda environment variables
+
+3. Verify Lambda has correct environment:
+   ```bash
+   aws lambda get-function-configuration \
+     --function-name alex-retirement \
+     --query 'Environment.Variables.[BEDROCK_MODEL_ID, BEDROCK_REGION]' \
+     --output table
+   ```
+
+   Should show:
+   ```
+   ---------------------------
+   | GetFunctionConfiguration  |
+   +---------------------------+
+   |  amazon.nova-pro-v1:0     |
+   |  us-east-1                |
+   +---------------------------+
+   ```
+
+**When to Use Each:**
+
+| Type | Model ID | Use Case | IAM Complexity |
+|------|----------|----------|----------------|
+| **Direct Model** | `amazon.nova-pro-v1:0` | Standard deployments, single region | Simple (one region) |
+| **Inference Profile** | `us.amazon.nova-pro-v1:0` | Cross-region load balancing, high availability | Complex (multiple regions) |
+
+**For Alex**: Always use direct model ID. Inference profiles are only needed for advanced multi-region deployments.
+
+**Debugging Steps:**
+
+1. Check CloudWatch logs for the actual error message
+2. Look for the resource ARN in the error - what region does it show?
+3. Compare to your `BEDROCK_REGION` environment variable
+4. If they don't match → you're using an inference profile
+5. Check `terraform/6_agents/terraform.tfvars` for the model ID
+6. Update to direct model ID and `terraform apply`
+
+### 6. **Testing Approach**
 
 Each agent directory has two test files:
 - `test_simple.py` - Local testing with mocks (uses `MOCK_LAMBDAS=true`)
@@ -385,24 +478,55 @@ The most common issues relate to AWS region choices! Check environment variables
 
 **Not the solution**: Changing uv project configurations (this is a red herring)
 
-### Issue 2: Region issues and Bedrock Model Access Denied
+### Issue 2: Bedrock Authorization Errors
 
-**Symptoms**: "Access denied" or "Model not found" errors when running agents
+**Symptoms**: "Access denied" or "not authorized to perform: bedrock:InvokeModel" errors
 
-**Root Cause**: Model access not granted in Bedrock, or wrong region
+**Root Cause**: Using inference profile instead of direct model ID, or IAM permissions issue
 
 **Diagnosis**:
-1. Which model are they trying to use?
-2. Which region is their code running in?
-3. Have they requested model access in Bedrock console?
-4. For inference profiles: Do they have permissions for multiple regions?
-5. Are the right environment variables being set? LiteLLM needs `AWS_REGION_NAME`. Check that nothing is being hardcoded in the code, and that tfvars are set right. Add logging to confirm which region is being used.
+1. Check the error message - which **region** appears in the resource ARN?
+2. Check Lambda environment: `aws lambda get-function-configuration --function-name alex-XXX --query 'Environment.Variables.[BEDROCK_MODEL_ID, BEDROCK_REGION]'`
+3. Does `BEDROCK_MODEL_ID` start with `us.` or `eu.`? → That's an inference profile (wrong)
+4. Does the error show a different region than your `BEDROCK_REGION`? → Inference profile is routing cross-region
+5. Check `terraform/6_agents/terraform.tfvars` - what's the value of `bedrock_model_id`?
+
+**Common Error Pattern:**
+```
+Error resource: arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-pro-v1:0
+Your BEDROCK_REGION=us-east-1
+```
+→ This means an inference profile is routing to us-west-2 but your IAM only allows us-east-1
 
 **Solution**:
-1. Go to Bedrock console in the correct region
-2. Click "Model access"
-3. Request access to Nova Pro
-4. For cross-region: Set up inference profiles with multi-region permissions
+1. Edit `terraform/6_agents/terraform.tfvars`:
+   ```hcl
+   bedrock_model_id = "amazon.nova-pro-v1:0"  # Remove us. or eu. prefix
+   bedrock_region = "us-east-1"
+   ```
+
+2. Apply the changes:
+   ```bash
+   cd terraform/6_agents
+   terraform apply
+   ```
+
+3. Verify the fix:
+   ```bash
+   aws lambda get-function-configuration \
+     --function-name alex-retirement \
+     --query 'Environment.Variables.BEDROCK_MODEL_ID' \
+     --output text
+   ```
+   Should output: `amazon.nova-pro-v1:0` (no region prefix)
+
+4. Test the agent:
+   ```bash
+   cd backend/retirement
+   uv run test_full.py
+   ```
+
+**Note**: Model access is now automatic for all serverless Bedrock models. There is no "request access" step.
 
 ### Issue 3: Terraform Apply Fails
 

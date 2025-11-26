@@ -19,6 +19,40 @@ provider "aws" {
 # Data source for current caller identity
 data "aws_caller_identity" "current" {}
 
+# Reference Part 5 Database resources via remote state
+data "terraform_remote_state" "database" {
+  backend = "local"
+  config = {
+    path = "../5_database/terraform.tfstate"
+  }
+}
+
+# Data sources to automatically find Aurora resources as fallback if remote state unavailable
+data "aws_rds_cluster" "aurora" {
+  count = var.aurora_cluster_arn == "" ? 1 : 0
+  cluster_identifier = "alex-aurora-cluster"
+}
+
+# Find all secrets to locate the Aurora credentials secret as fallback
+data "aws_secretsmanager_secrets" "all" {
+  count = var.aurora_secret_arn == "" ? 1 : 0
+}
+
+# Use provided ARNs, remote state outputs, or data source ARNs (in priority order)
+locals {
+  aurora_cluster_arn = coalesce(
+    var.aurora_cluster_arn != "" ? var.aurora_cluster_arn : null,
+    try(data.terraform_remote_state.database.outputs.aurora_cluster_arn, null),
+    length(data.aws_rds_cluster.aurora) > 0 ? data.aws_rds_cluster.aurora[0].arn : null
+  )
+  aurora_secret_arn = coalesce(
+    var.aurora_secret_arn != "" ? var.aurora_secret_arn : null,
+    try(data.terraform_remote_state.database.outputs.aurora_secret_arn, null),
+    length(data.aws_secretsmanager_secrets.all) > 0 && length(data.aws_secretsmanager_secrets.all[0].arns) > 0 ?
+    try([for arn in data.aws_secretsmanager_secrets.all[0].arns : arn if length(regexall("alex-aurora-credentials-", arn)) > 0][0], null) : null
+  )
+}
+
 # ========================================
 # SQS Queue for Async Job Processing
 # ========================================
@@ -77,15 +111,10 @@ resource "aws_iam_role" "lambda_agents_role" {
   }
 }
 
-# IAM policy for Lambda agents
-resource "aws_iam_role_policy" "lambda_agents_policy" {
-  name = "alex-lambda-agents-policy"
-  role = aws_iam_role.lambda_agents_role.id
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      # CloudWatch Logs
+# Build IAM policy statements list conditionally
+locals {
+  iam_policy_statements = concat(
+    [
       {
         Effect = "Allow"
         Action = [
@@ -95,7 +124,6 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
         ]
         Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*"
       },
-      # SQS access for orchestrator
       {
         Effect = "Allow"
         Action = [
@@ -105,7 +133,6 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
         ]
         Resource = aws_sqs_queue.analysis_jobs.arn
       },
-      # Lambda invocation for orchestrator to call other agents
       {
         Effect = "Allow"
         Action = [
@@ -113,27 +140,26 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
         ]
         Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:alex-*"
       },
-      # Aurora Data API access
-      {
-        Effect = "Allow"
-        Action = [
-          "rds-data:ExecuteStatement",
-          "rds-data:BatchExecuteStatement",
-          "rds-data:BeginTransaction",
-          "rds-data:CommitTransaction",
-          "rds-data:RollbackTransaction"
-        ]
-        Resource = var.aurora_cluster_arn
-      },
-      # Secrets Manager for database credentials
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Resource = var.aurora_secret_arn
-      },
-      # S3 Vectors access for all agents
+    ],
+    local.aurora_cluster_arn != "" ? [{
+      Effect = "Allow"
+      Action = [
+        "rds-data:ExecuteStatement",
+        "rds-data:BatchExecuteStatement",
+        "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction",
+        "rds-data:RollbackTransaction"
+      ]
+      Resource = local.aurora_cluster_arn
+    }] : [],
+    local.aurora_secret_arn != "" ? [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue"
+      ]
+      Resource = local.aurora_secret_arn
+    }] : [],
+    [
       {
         Effect = "Allow"
         Action = [
@@ -145,7 +171,6 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
           "arn:aws:s3:::${var.vector_bucket}/*"
         ]
       },
-      # S3 Vectors API access for all agents
       {
         Effect = "Allow"
         Action = [
@@ -154,7 +179,6 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
         ]
         Resource = "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${var.vector_bucket}/index/*"
       },
-      # SageMaker endpoint access for reporter agent
       {
         Effect = "Allow"
         Action = [
@@ -162,7 +186,6 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
         ]
         Resource = "arn:aws:sagemaker:${var.aws_region}:${data.aws_caller_identity.current.account_id}:endpoint/${var.sagemaker_endpoint}"
       },
-      # Bedrock access for all agents
       {
         Effect = "Allow"
         Action = [
@@ -170,11 +193,27 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
           "bedrock:InvokeModelWithResponseStream"
         ]
         Resource = [
-          "arn:aws:bedrock:${var.bedrock_region}::foundation-model/*",
-          "arn:aws:bedrock:${var.bedrock_region}:*:inference-profile/*"
+          # Allow Bedrock in common regions (LiteLLM may use different regions based on model ID parsing)
+          "arn:aws:bedrock:us-east-1::foundation-model/*",
+          "arn:aws:bedrock:us-east-1:*:inference-profile/*",
+          "arn:aws:bedrock:us-east-2::foundation-model/*",
+          "arn:aws:bedrock:us-east-2:*:inference-profile/*",
+          "arn:aws:bedrock:us-west-2::foundation-model/*",
+          "arn:aws:bedrock:us-west-2:*:inference-profile/*"
         ]
       }
     ]
+  )
+}
+
+# IAM policy for Lambda agents
+resource "aws_iam_role_policy" "lambda_agents_policy" {
+  name = "alex-lambda-agents-policy"
+  role = aws_iam_role.lambda_agents_role.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = local.iam_policy_statements
   })
 }
 
@@ -235,8 +274,8 @@ resource "aws_lambda_function" "planner" {
   
   environment {
     variables = {
-      AURORA_CLUSTER_ARN = var.aurora_cluster_arn
-      AURORA_SECRET_ARN  = var.aurora_secret_arn
+      AURORA_CLUSTER_ARN = local.aurora_cluster_arn
+      AURORA_SECRET_ARN  = local.aurora_secret_arn
       DATABASE_NAME      = "alex"
       VECTOR_BUCKET      = var.vector_bucket
       BEDROCK_MODEL_ID   = var.bedrock_model_id
@@ -286,8 +325,8 @@ resource "aws_lambda_function" "tagger" {
 
   environment {
     variables = {
-      AURORA_CLUSTER_ARN = var.aurora_cluster_arn
-      AURORA_SECRET_ARN  = var.aurora_secret_arn
+      AURORA_CLUSTER_ARN = local.aurora_cluster_arn
+      AURORA_SECRET_ARN  = local.aurora_secret_arn
       DATABASE_NAME      = "alex"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
@@ -326,8 +365,8 @@ resource "aws_lambda_function" "reporter" {
   
   environment {
     variables = {
-      AURORA_CLUSTER_ARN = var.aurora_cluster_arn
-      AURORA_SECRET_ARN  = var.aurora_secret_arn
+      AURORA_CLUSTER_ARN = local.aurora_cluster_arn
+      AURORA_SECRET_ARN  = local.aurora_secret_arn
       DATABASE_NAME      = "alex"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
@@ -367,8 +406,8 @@ resource "aws_lambda_function" "charter" {
   
   environment {
     variables = {
-      AURORA_CLUSTER_ARN = var.aurora_cluster_arn
-      AURORA_SECRET_ARN  = var.aurora_secret_arn
+      AURORA_CLUSTER_ARN = local.aurora_cluster_arn
+      AURORA_SECRET_ARN  = local.aurora_secret_arn
       DATABASE_NAME      = "alex"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
@@ -407,8 +446,8 @@ resource "aws_lambda_function" "retirement" {
   
   environment {
     variables = {
-      AURORA_CLUSTER_ARN = var.aurora_cluster_arn
-      AURORA_SECRET_ARN  = var.aurora_secret_arn
+      AURORA_CLUSTER_ARN = local.aurora_cluster_arn
+      AURORA_SECRET_ARN  = local.aurora_secret_arn
       DATABASE_NAME      = "alex"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region

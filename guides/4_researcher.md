@@ -8,7 +8,7 @@ Before starting, ensure you have:
 1. Completed Guides 1-3 (SageMaker, S3 Vectors, and Ingest Pipeline deployed)
 2. Docker Desktop installed and running
 3. AWS CLI configured with your credentials
-4. Access to AWS Bedrock OpenAI OSS models (see Step 0 below)
+4. IAM permissions for AWS Bedrock (models are automatically enabled on first use - see Step 0)
 
 ## REMINDER - MAJOR TIP!!
 
@@ -48,24 +48,21 @@ graph LR
     style SchedLambda fill:#FF9900
 ```
 
-## Step 0: Request Access to Bedrock Models
+## Step 0: Bedrock Model Access
 
-The Researcher uses AWS Bedrock with OpenAI's open-source OSS 120B model. You need to request access to this model first.
+The Researcher uses AWS Bedrock models. We recommend using Amazon Nova Pro for best performance and cost-effectiveness.
 
-### Request Model Access - these instructions are for OSS models, but you can also use Nova in us-east-1 or in your region (cheaper and easier)
+**Good News**: Serverless foundation models (including Nova Pro and OpenAI OSS models) are now automatically enabled across all AWS commercial regions when first invoked in your account. You no longer need to manually request model access through the Model Access page.
 
-1. Sign in to the AWS Console
-2. Navigate to **Amazon Bedrock** service
-3. Switch to the **US West (Oregon) us-west-2** region (top right corner)
-4. In the left sidebar, click **Model access**
-5. Click **Manage model access** or **Modify model access**
-6. Find the **OpenAI** section
-7. Check the boxes for:
-   - **gpt-oss-120b** (OpenAI GPT OSS 120B)
-   - **gpt-oss-20b** (OpenAI GPT OSS 20B) - optional, smaller model
-8. Click **Request model access** at the bottom
-9. Wait for approval (usually instant for these models)
-10. As an alternative - request access to the Amazon Nova models in your region or in us-east-1
+**What this means:**
+- Models are automatically enabled when you first invoke them
+- No manual activation required
+- Simply invoke the model using the `InvokeModel` or `Converse` API operations
+- Account administrators can still control access through IAM policies and Service Control Policies if needed
+
+**Model Options:**
+- **Recommended**: Amazon Nova Pro (`us.amazon.nova-pro-v1:0` or `eu.amazon.nova-pro-v1:0`) - Available in multiple regions, cost-effective, excellent tool-calling support
+- **Alternative**: OpenAI OSS models (gpt-oss-120b, gpt-oss-20b) - Only available in **us-west-2** region
 
 **Important Notes:**
 - ⚠️ The OSS models are ONLY available in **us-west-2** region
@@ -73,6 +70,7 @@ The Researcher uses AWS Bedrock with OpenAI's open-source OSS 120B model. You ne
 - The OSS models are open-weight models from OpenAI, not the commercial GPT models
 - No API key is required for Bedrock - AWS IAM handles authentication
 - The researcher requires an OpenAI API key for the OpenAI Agents SDK's tracing functionality (to monitor and debug agent execution)
+- The first invocation will automatically enable the model in your account
 
 ## Extra part of Step 0: IMPORTANT - ADDED SINCE THE VIDEOS!!
 
@@ -104,8 +102,9 @@ You should see this section:
     model = LitellmModel(model=MODEL)
 ```
 
-Please update the value of REGION and MODEL to reflect the model you have access to. See the examples given for possible values.  
+Please update the value of REGION and MODEL to reflect the model you want to use. See the examples given for possible values.  
 Note that nova-lite is not an acceptable choice as it doesn't support tool calling / MCP. Thank you Yuelin L!
+Note: Models are automatically enabled on first use, so you can use any available model without manual activation.
 
 ## Step 1: Deploy the Infrastructure
 
@@ -428,10 +427,12 @@ This will remove the scheduler but keep all your other services running.
 - The research should still complete and be stored
 
 ### "Invalid model identifier" or Bedrock errors
-- Ensure you've requested access to the OpenAI OSS models in us-west-2 (see Step 0)
+- Models are automatically enabled on first use - no manual activation needed
 - Check that your IAM role has Bedrock permissions (should be added by Terraform)
-- The models are ONLY available in us-west-2 but can be accessed from any region
-- Verify model access: Go to Bedrock console → Model access → Check status
+- The OSS models are ONLY available in us-west-2 but can be accessed from any region
+- Nova Pro models are available in multiple regions (us-east-1, us-west-2, eu-west-1, etc.)
+- The first invocation will automatically enable the model in your account
+- If you see access denied errors, verify IAM permissions allow `bedrock:InvokeModel` action
 
 ## Clean Up (Optional)
 

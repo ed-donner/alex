@@ -38,7 +38,28 @@ def test_tagger_lambda():
         )
         
         result = json.loads(response['Payload'].read())
-        print(f"\nLambda Response: {json.dumps(result, indent=2)}")
+        
+        # Parse body if it's a string
+        if isinstance(result.get('body'), str):
+            body = json.loads(result['body'])
+        else:
+            body = result.get('body', result)
+        
+        print(f"\nLambda Response:")
+        print(f"  Status Code: {result.get('statusCode', 'N/A')}")
+        print(f"  Tagged: {body.get('tagged', 0)} instruments")
+        print(f"  Updated: {body.get('updated', [])}")
+        
+        # Show errors if any
+        if body.get('errors'):
+            print(f"\n❌ Classification Errors ({len(body['errors'])}):")
+            for error in body['errors']:
+                symbol = error.get('symbol', 'Unknown')
+                error_msg = error.get('error', 'Unknown error')
+                # Truncate long error messages
+                if len(error_msg) > 200:
+                    error_msg = error_msg[:200] + "..."
+                print(f"  - {symbol}: {error_msg}")
         
         # Check database for updated instruments
         print("\n✅ Checking database for tagged instruments:")

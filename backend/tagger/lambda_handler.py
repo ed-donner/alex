@@ -33,11 +33,13 @@ async def process_instruments(instruments: List[Dict[str, str]]) -> Dict[str, An
     """
     # Run the classification
     logger.info(f"Classifying {len(instruments)} instruments")
-    classifications = await tag_instruments(instruments)
+    classifications, classification_errors = await tag_instruments(instruments)
+    
+    # Start with classification errors
+    errors = classification_errors.copy()
     
     # Update database with classifications
     updated = []
-    errors = []
     
     for classification in classifications:
         try:

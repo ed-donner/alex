@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+*.egg
+
+# UV
+uv.lock
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars
+!*.tfvars.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Secrets and credentials
+*.json
+!package.json
+!tsconfig.json
+!eslint.config.json
+*-terraform-key.json
+application_default_credentials.json
+service-account-*.json
+
+# Node
+node_modules/
+.next/
+out/
+
+# Docker
+*.dockerignore
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# Local development
+Local Postgresql Kill and Start Commands.txt
+

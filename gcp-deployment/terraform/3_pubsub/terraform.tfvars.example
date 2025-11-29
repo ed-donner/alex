@@ -1,0 +1,12 @@
+# =============================================================================
+# Pub/Sub Configuration
+# =============================================================================
+
+project_id                  = "your-gcp-project-id"
+region                      = "us-central1"
+environment                 = "dev"
+
+# Service account for Cloud Run (must have Pub/Sub permissions)
+# Update this value after running terraform/1_permissions
+cloud_run_service_account   = "cloud-run-sa@your-gcp-project-id.iam.gserviceaccount.com"
+

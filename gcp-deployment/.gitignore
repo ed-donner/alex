@@ -12,7 +12,6 @@ ENV/
 dist/
 build/
 *.egg
-
 # UV
 uv.lock
 

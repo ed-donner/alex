@@ -291,21 +291,39 @@ See [guides/GEMINI_SETUP.md](guides/GEMINI_SETUP.md) for detailed setup instruct
 
 ## 🧹 Cleanup
 
-To destroy all resources:
+### Using the Destroy Script (Recommended)
 
-```bash
-./scripts/deploy.sh destroy
+The easiest way to destroy resources is using the PowerShell destroy script:
+
+```powershell
+# Destroy everything (with confirmation)
+.\scripts\destroy.ps1
+
+# Destroy everything including secrets (no confirmation)
+.\scripts\destroy.ps1 -DestroySecrets -SkipConfirmation
+
+# Destroy only database (biggest cost savings)
+.\scripts\destroy.ps1 -DestroyDatabase -DestroyAll:$false
+
+# Destroy specific phases
+.\scripts\destroy.ps1 -DestroyFrontend -DestroyAgents -DestroyAll:$false
 ```
 
-Or manually:
+See [scripts/DESTROY_README.md](scripts/DESTROY_README.md) for full documentation.
+
+### Manual Cleanup
+
+Or destroy manually in reverse order:
 
 ```bash
-for phase in 7_frontend 6_agents 5_database 2_vertex_ai 1_permissions; do
+for phase in 7_frontend 6_agents 5_database 3_pubsub 2_vertex_ai 1_permissions; do
   cd terraform/$phase
   terraform destroy -auto-approve
   cd ../..
 done
 ```
+
+**Note**: Destroy in reverse order (7 → 1) to handle dependencies correctly.
 
 ## ❓ Troubleshooting
 

@@ -318,6 +318,7 @@ For detailed troubleshooting information, see [guides/TROUBLESHOOTING.md](guides
 3. **Quota exceeded**: Request quota increase in GCP Console
 4. **Environment variables not loading**: Check `.env` file in root directory
 5. **Pub/Sub errors**: Verify topic exists and service account has permissions
+6. **Missing pg8000 dependency**: See [guides/FIX_PG8000_DEPENDENCY.md](guides/FIX_PG8000_DEPENDENCY.md) - Fixed in Dockerfiles
 
 ### Useful Commands
 
@@ -360,6 +361,7 @@ gcloud iam service-accounts list --project=your-gcp-project-id
 - [Architecture Comparison](guides/ARCHITECTURE_COMPARISON.md) - Detailed architecture differences
 - [Troubleshooting Guide](guides/TROUBLESHOOTING.md) - Common issues and solutions
 - [Gemini Setup](guides/GEMINI_SETUP.md) - Configuring Gemini models
+- [Fix: pg8000 Dependency](guides/FIX_PG8000_DEPENDENCY.md) - Solution for missing database dependencies in agent containers
 
 ## 🤝 Contributing
 

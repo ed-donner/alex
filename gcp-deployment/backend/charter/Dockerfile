@@ -21,6 +21,10 @@ RUN sed -i.bak 's|path = "../database"|path = "./database"|g' pyproject.toml && 
 
 # Install Python dependencies
 # Don't use --frozen because the lock file has the old path
+# First install database package with all its dependencies (including pg8000)
+# This ensures transitive dependencies from the local path dependency are installed
+RUN cd database && uv pip install --system -e . && cd ..
+# Then sync the main project dependencies
 RUN uv sync --no-install-project
 
 # Copy charter application code

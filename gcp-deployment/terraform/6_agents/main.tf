@@ -166,6 +166,26 @@ resource "google_cloud_run_v2_service" "planner" {
         }
       }
       
+      # Polygon.io API Key (only if secret ID is provided)
+      dynamic "env" {
+        for_each = var.polygon_api_key_secret_id != "" ? [1] : []
+        content {
+          name = "POLYGON_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = var.polygon_api_key_secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+      
+      # Polygon plan type
+      env {
+        name  = "POLYGON_PLAN"
+        value = var.polygon_plan
+      }
+      
       startup_probe {
         http_get {
           path = "/health"

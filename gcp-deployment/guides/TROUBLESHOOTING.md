@@ -157,6 +157,39 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 
 ## Docker Build Issues
 
+### Error: "ModuleNotFoundError: No module named 'pg8000'"
+
+**Symptoms:**
+- Agents (Reporter, Charter, Retirement) fail with `ModuleNotFoundError: No module named 'pg8000'`
+- Error occurs when agents try to connect to Cloud SQL database
+- Planner works fine, but other agents return 500 errors
+
+**Root Cause:**
+The `pg8000` package is a dependency of the `alex-database` package, but when using `uv sync --no-install-project`, transitive dependencies from local path dependencies may not be installed correctly.
+
+**Solution:**
+Explicitly install the database package before syncing main project dependencies. Update the Dockerfiles for Reporter, Charter, and Retirement:
+
+```dockerfile
+# Install Python dependencies
+# Don't use --frozen because the lock file has the old path
+# First install database package with all its dependencies (including pg8000)
+# This ensures transitive dependencies from the local path dependency are installed
+RUN cd database && uv pip install --system -e . && cd ..
+# Then sync the main project dependencies
+RUN uv sync --no-install-project
+```
+
+**Verification:**
+After rebuilding and redeploying, check logs to confirm no more `pg8000` errors:
+```bash
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=~'alex-(reporter|charter|retirement)' AND severity>=ERROR" \
+  --limit 20 \
+  --format="table(timestamp,resource.labels.service_name,severity,textPayload)" \
+  --project=your-gcp-project-id \
+  --freshness=10m
+```
+
 ### Error: "Distribution not found at: file:///database"
 
 **Cause:** Docker build context doesn't include the `database` directory.

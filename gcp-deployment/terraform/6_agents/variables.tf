@@ -124,3 +124,15 @@ variable "cors_origins" {
   type        = string
   default     = ""
 }
+
+variable "polygon_api_key_secret_id" {
+  description = "Secret Manager ID for Polygon.io API key (optional, leave empty if not using Polygon)"
+  type        = string
+  default     = ""
+}
+
+variable "polygon_plan" {
+  description = "Polygon.io plan type (free or paid) - affects which API endpoints are used"
+  type        = string
+  default     = "free"
+}

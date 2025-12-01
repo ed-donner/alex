@@ -183,19 +183,40 @@ async def health():
 
 ### Dockerfile
 
+**Important**: When using local path dependencies (like `alex-database`), you must explicitly install the database package to ensure all transitive dependencies (including `pg8000`) are installed. See [FIX_PG8000_DEPENDENCY.md](FIX_PG8000_DEPENDENCY.md) for details.
+
 ```dockerfile
-# backend/agents/researcher/Dockerfile
-FROM python:3.11-slim
+# backend/reporter/Dockerfile (example)
+FROM --platform=linux/amd64 python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python package manager
+RUN pip install uv
 
-COPY . .
+# Copy database package (required dependency)
+COPY database ./database
 
-# Cloud Run expects port 8080
-ENV PORT=8080
+# Copy shared modules
+COPY common ./common
+
+# Copy agent-specific files
+COPY reporter/pyproject.toml reporter/uv.lock ./
+
+# Update pyproject.toml to use ./database instead of ../database
+RUN sed -i.bak 's|path = "../database"|path = "./database"|g' pyproject.toml && rm pyproject.toml.bak
+
+# Install Python dependencies
+# First install database package with all its dependencies (including pg8000)
+RUN cd database && uv pip install --system -e . && cd ..
+# Then sync the main project dependencies
+RUN uv sync --no-install-project
+
+# Copy agent application code
+COPY reporter/*.py ./
+
+# Cloud Run expects port 8000
+ENV PORT=8000
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
 ```

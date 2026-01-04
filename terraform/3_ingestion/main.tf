@@ -1,3 +1,4 @@
+data "aws_caller_identity" "current" {}
 terraform {
   required_version = ">= 1.5"
   
@@ -17,7 +18,7 @@ provider "aws" {
 }
 
 # Data source for current caller identity
-data "aws_caller_identity" "current" {}
+#data "aws_caller_identity" "current" {}
 
 # ========================================
 # S3 Vectors Bucket

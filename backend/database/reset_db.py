@@ -164,7 +164,10 @@ def main():
         print("\n📝 Running migrations...")
         import subprocess
         result = subprocess.run(['uv', 'run', 'run_migrations.py'], 
-                              capture_output=True, text=True)
+                             capture_output=True, 
+                             text=True, 
+                             encoding="utf-8",    # <-- ADD THIS
+                             errors="ignore")
         
         if result.returncode != 0:
             print("❌ Migration failed!")
@@ -177,7 +180,10 @@ def main():
     print("\n🌱 Loading seed data...")
     import subprocess
     result = subprocess.run(['uv', 'run', 'seed_data.py'], 
-                          capture_output=True, text=True)
+                          capture_output=True, 
+                          text=True, 
+                          encoding="utf-8",    # <-- ADD THIS
+                          errors="ignore")
     
     if result.returncode != 0:
         print("❌ Seed data failed!")

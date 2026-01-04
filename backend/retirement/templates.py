@@ -56,7 +56,7 @@ User Goals:
 Market Assumptions:
 - Average equity returns: 7% annually
 - Average bond returns: 4% annually
-- Inflation rate: 3% annually
+- Inflation rate: 5% annually
 - Safe withdrawal rate: 4% initially
 
 Perform the following analyses:

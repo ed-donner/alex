@@ -76,6 +76,29 @@ resource "aws_iam_role" "lambda_agents_role" {
     Part    = "6"
   }
 }
+resource "aws_iam_role_policy" "lambda_agents_bedrock_policy" {
+  name = "alex-lambda-agents-bedrock-policy"
+  role = aws_iam_role.lambda_agents_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream",
+          "bedrock:DescribeModel",
+          "bedrock:ListModels"
+        ]
+        Resource = [
+          "arn:aws:bedrock:*::foundation-model/*",
+          "arn:aws:bedrock:*:*:inference-profile/*"
+        ]
+      }
+    ]
+  })
+}
 
 # IAM policy for Lambda agents
 resource "aws_iam_role_policy" "lambda_agents_policy" {

@@ -32,27 +32,3 @@ Report Guidelines:
 - Keep sections concise but comprehensive
 
 """
-
-ANALYSIS_TASK_TEMPLATE = """Generate a comprehensive portfolio analysis report for this portfolio:
-
-Portfolio Data:
-{portfolio_data}
-
-User Context:
-- Years until retirement: {years_until_retirement}
-- Target retirement income: ${target_income:,.0f}/year
-
-Market Context:
-{market_context}
-
-Create a detailed analysis covering:
-1. Executive Summary (3-4 key points)
-2. Portfolio Composition Analysis
-3. Diversification Assessment
-4. Risk Profile Evaluation
-5. Retirement Readiness Analysis
-6. Specific Recommendations (5-7 actionable items)
-
-Format the report in markdown with clear sections and bullet points.
-Focus on practical insights that help the user improve their portfolio.
-"""

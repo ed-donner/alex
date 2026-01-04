@@ -138,7 +138,9 @@ alex_api_key = "your-api-key-here"  # From Part 3
 scheduler_enabled = false  # Keep false for now
 ```
 
-Deploy the ECR repository and IAM roles first:
+Deploy the ECR repository and IAM roles first.
+
+Mac/Linux:
 
 ```bash
 # Initialize Terraform (creates local state file)
@@ -147,6 +149,17 @@ terraform init
 # Deploy only the ECR repository and IAM roles (not App Runner yet)
 terraform apply -target=aws_ecr_repository.researcher -target=aws_iam_role.app_runner_role
 ```
+
+PC:
+
+```powershell
+# Initialize Terraform (creates local state file)
+terraform init
+
+# Deploy only the ECR repository and IAM roles (not App Runner yet)
+terraform apply -target="aws_ecr_repository.researcher" -target="aws_iam_role.app_runner_role"
+```
+
 
 Type `yes` when prompted. This creates:
 - ECR repository for your Docker images

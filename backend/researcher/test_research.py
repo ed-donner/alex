@@ -102,7 +102,7 @@ def test_research(topic=None):
         print("\n✅ The research has been automatically stored in your knowledge base.")
         print("   To verify, run:")
         print("     cd ../ingest")
-        print("     uv run search_api.py")
+        print("     uv run test_search_s3vectors.py")
         
     except requests.exceptions.Timeout:
         print("❌ Request timed out. The service might be under heavy load.")

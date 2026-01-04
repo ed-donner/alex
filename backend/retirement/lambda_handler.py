@@ -13,6 +13,11 @@ from agents import Agent, Runner, trace
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from litellm.exceptions import RateLimitError
 
+
+class AgentTemporaryError(Exception):
+    """Temporary error that should trigger retry"""
+    pass
+
 try:
     from dotenv import load_dotenv
     load_dotenv(override=True)
@@ -55,10 +60,10 @@ def get_user_preferences(job_id: str) -> Dict[str, Any]:
     }
 
 @retry(
-    retry=retry_if_exception_type(RateLimitError),
+    retry=retry_if_exception_type((RateLimitError, AgentTemporaryError, TimeoutError, asyncio.TimeoutError)),
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=4, max=60),
-    before_sleep=lambda retry_state: logger.info(f"Retirement: Rate limit hit, retrying in {retry_state.next_action.sleep} seconds...")
+    before_sleep=lambda retry_state: logger.info(f"Retirement: Temporary error, retrying in {retry_state.next_action.sleep} seconds...")
 )
 async def run_retirement_agent(job_id: str, portfolio_data: Dict[str, Any]) -> Dict[str, Any]:
     """Run the retirement specialist agent."""
@@ -81,11 +86,21 @@ async def run_retirement_agent(job_id: str, portfolio_data: Dict[str, Any]) -> D
             tools=tools  # Empty list now
         )
         
-        result = await Runner.run(
-            agent,
-            input=task,
-            max_turns=20
-        )
+        try:
+            result = await Runner.run(
+                agent,
+                input=task,
+                max_turns=20
+            )
+        except (TimeoutError, asyncio.TimeoutError) as e:
+            logger.warning(f"Retirement agent timeout: {e}")
+            raise AgentTemporaryError(f"Timeout during agent execution: {e}")
+        except Exception as e:
+            error_str = str(e).lower()
+            if "timeout" in error_str or "throttled" in error_str:
+                logger.warning(f"Retirement temporary error: {e}")
+                raise AgentTemporaryError(f"Temporary error: {e}")
+            raise  # Re-raise non-retryable errors
         
         # Save the analysis to database
         retirement_payload = {
@@ -116,7 +131,7 @@ def lambda_handler(event, context):
     }
     """
     # Wrap entire handler with observability context
-    with observe():
+    with observe() as observability:
         try:
             logger.info(f"Retirement Lambda invoked with event: {json.dumps(event)[:500]}")
 
@@ -134,6 +149,7 @@ def lambda_handler(event, context):
             portfolio_data = event.get('portfolio_data')
             if not portfolio_data:
                 # Try to load from database
+                logger.info(f"Retirement Loading portfolio data for job {job_id}")
                 try:
                     import sys
                     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -142,8 +158,47 @@ def lambda_handler(event, context):
                     db = Database()
                     job = db.jobs.find_by_id(job_id)
                     if job:
-                        portfolio_data = job.get('request_payload', {}).get('portfolio_data', {})
+                        if observability:
+                            observability.create_event(
+                                name="Retirement Started!", status_message="OK"
+                            )
+                        
+                        # portfolio_data = job.get('request_payload', {}).get('portfolio_data', {})
+                        user_id = job['clerk_user_id']
+                        user = db.users.find_by_clerk_id(user_id)
+                        accounts = db.accounts.find_by_user(user_id)
+
+                        portfolio_data = {
+                            'user_id': user_id,
+                            'job_id': job_id,
+                            'years_until_retirement': user.get('years_until_retirement', 30) if user else 30,
+                            'accounts': []
+                        }
+
+                        for account in accounts:
+                            account_data = {
+                                'id': account['id'],
+                                'name': account['account_name'],
+                                'type': account.get('account_type', 'investment'),
+                                'cash_balance': float(account.get('cash_balance', 0)),
+                                'positions': []
+                            }
+
+                            positions = db.positions.find_by_account(account['id'])
+                            for position in positions:
+                                instrument = db.instruments.find_by_symbol(position['symbol'])
+                                if instrument:
+                                    account_data['positions'].append({
+                                        'symbol': position['symbol'],
+                                        'quantity': float(position['quantity']),
+                                        'instrument': instrument
+                                    })
+
+                            portfolio_data['accounts'].append(account_data)
+
+                        logger.info(f"Retirement: Loaded {len(portfolio_data['accounts'])} accounts with positions")
                     else:
+                        logger.error(f"Retirement: Job {job_id} not found")
                         return {
                             'statusCode': 404,
                             'body': json.dumps({'error': f'Job {job_id} not found'})
@@ -154,6 +209,8 @@ def lambda_handler(event, context):
                         'statusCode': 400,
                         'body': json.dumps({'error': 'No portfolio data provided'})
                     }
+
+            logger.info(f"Retirement: Processing job {job_id}")
 
             # Run the agent
             result = asyncio.run(run_retirement_agent(job_id, portfolio_data))

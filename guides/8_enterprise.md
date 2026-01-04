@@ -671,77 +671,41 @@ Modern Large Language Models (LLMs) and agentic systems address this concern thr
 
 ### Implementing Explainability in the Tagger Agent
 
-Let's modify the Tagger agent to include rationale for its decisions. Add this to `backend/tagger/agent.py`:
+Let's modify the Tagger agent to include rationale for its decisions.
+
+In `backend/tagger/agent.py`, update the Pydantic object:
+
+`InstrumentClassification`
+
+so that in contains a rationale field. Be sure to have this field **before** the actual classification, so that the model needs to reason about what its doing rather than coming up with an explanation after the fact:
 
 ```python
-from pydantic import BaseModel, Field
-from typing import Dict
+class InstrumentClassification(BaseModel):
+    """Structured output for instrument classification"""
 
-class InstrumentClassificationWithRationale(BaseModel):
-    # Rationale MUST come first so LLM generates reasoning before answers
-    rationale: str = Field(
-        description="Detailed explanation of why these classifications were chosen, including specific factors considered"
-    )
+    # ...
+    rationale: str = Field(description="Detailed explanation of why these classifications were chosen, including specific factors considered")
+    # ...
+```
 
-    asset_class: AssetClassType = Field(
-        description="Primary asset class classification"
-    )
+Then update the function `classify_instrument` so that it records the rationale.  
+Change this:  
 
-    asset_class_allocation: Dict[str, float] = Field(
-        description="Percentage breakdown by asset class",
-        example={"equity": 100.0}
-    )
+`   return result.final_output_as(InstrumentClassification)`
 
-    region_allocation: Dict[str, float] = Field(
-        description="Percentage breakdown by geographic region",
-        example={"north_america": 70.0, "europe": 20.0, "asia_pacific": 10.0}
-    )
+To:
 
-    sector_allocation: Dict[str, float] = Field(
-        description="Percentage breakdown by sector (only for equity)",
-        example={"technology": 30.0, "healthcare": 20.0, "financial": 50.0}
-    )
+```python
 
-# In your tagger agent function:
-async def run_tagger_agent(instrument: dict) -> dict:
-    model = LitellmModel(model=f"bedrock/{bedrock_model}")
-
-    with trace("Classify instrument with explainability"):
-        agent = Agent(
-            name="Instrument Tagger with Explainability",
-            instructions=CLASSIFICATION_INSTRUCTIONS,
-            model=model,
-            response_format=InstrumentClassificationWithRationale
-        )
-
-        result = await Runner.run(
-            agent,
-            input=create_classification_task(instrument),
-            max_turns=1
-        )
-
-        classification = result.final_output_as(InstrumentClassificationWithRationale)
-
-        # Log the rationale for audit trail
-        logger.info(json.dumps({
-            "event": "CLASSIFICATION_RATIONALE",
-            "symbol": instrument["symbol"],
-            "rationale": classification.rationale,
-            "timestamp": datetime.utcnow().isoformat()
-        }))
-
-        # Return classification without rationale to planner
-        return {
-            "asset_class": classification.asset_class,
-            "asset_class_allocation": classification.asset_class_allocation,
-            "region_allocation": classification.region_allocation,
-            "sector_allocation": classification.sector_allocation
-        }
+    classification = result.final_output_as(InstrumentClassification)
+    full_json = classification.model_dump_json()
+    logger.info(f"Classification rationale: {classification.rationale} Full object: {full_json}")
+    return classification
 ```
 
 ### Adding Explainability to Portfolio Recommendations
 
-For the Reporter agent, include reasoning in recommendations:
+For the Reporter agent, include reasoning in recommendations - something like:
 
 ```python
 # In templates.py

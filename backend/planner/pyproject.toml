@@ -9,7 +9,6 @@ dependencies = [
     "openai-agents[litellm]>=0.3.0",
     "polygon-api-client>=1.15.3",
     "pydantic>=2.11.7",
-    "pydantic-ai>=1.0.6",
     "python-dotenv>=1.1.1",
     "tenacity>=9.1.2",
 ]

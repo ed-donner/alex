@@ -5,6 +5,7 @@ Simple test for Retirement agent
 
 import asyncio
 import json
+from decimal import Decimal
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -18,8 +19,21 @@ def test_retirement():
     
     # Create a real job in the database
     db = Database()
+    
+    # Ensure test user exists
+    test_user_id = "test_user_001"
+    existing_user = db.users.find_by_clerk_id(test_user_id)
+    if not existing_user:
+        db.users.create_user(
+            clerk_user_id=test_user_id,
+            display_name="Test User",
+            years_until_retirement=25,
+            target_retirement_income=Decimal('75000')
+        )
+        print(f"Created test user: {test_user_id}")
+    
     job_create = JobCreate(
-        clerk_user_id="test_user_001",
+        clerk_user_id=test_user_id,
         job_type="portfolio_analysis",
         request_payload={"test": True}
     )

@@ -67,7 +67,7 @@ Before starting, ensure you have:
 - AWS CLI configured
 - Python with `uv` package manager installed
 - Docker Desktop running
-- Access to AWS Bedrock models in us-west-2
+- IAM permissions for AWS Bedrock (models are automatically enabled on first use - see Step 0)
 
 ## Before we start - Context Engineering
 
@@ -75,21 +75,19 @@ Read this seminal post by Google DeepMind Senior AI Relation Engineer Philipp Sc
 
 https://www.philschmid.de/context-engineering
 
-## Step 0: Request Additional Bedrock Model Access
+## Step 0: Bedrock Model Access
 
-Our agents use Amazon's Nova Pro model for improved reliability. Let's ensure you have access:
+Our agents use Amazon's Nova Pro model for improved reliability. 
 
-1. Sign in to the AWS Console
-2. Navigate to **Amazon Bedrock**
-3. Switch to **US West (Oregon) us-west-2** region
-4. Click **Model access** in the left sidebar
-5. Click **Manage model access**
-6. Find the **Amazon** section
-7. Check the box for **Amazon Nova Pro**
-8. Click **Request model access**
-9. Wait for approval (usually instant)
+**Good News**: Serverless foundation models (including Nova Pro) are now automatically enabled across all AWS commercial regions when first invoked in your account. You no longer need to manually request model access through the Model Access page.
 
-**Note**: The agents will use this model cross-region from your deployment region.
+**What this means:**
+- Models are automatically enabled when you first invoke them
+- No manual activation required
+- Simply invoke the model using the `InvokeModel` or `Converse` API operations
+- Account administrators can still control access through IAM policies and Service Control Policies if needed
+
+**Note**: The agents will use this model cross-region from your deployment region. The first invocation will automatically enable the model in your account.
 
 ## Step 1: Configure Environment Variables
 
@@ -313,10 +311,10 @@ Edit `terraform.tfvars` in Cursor and update with your values:
 # Your AWS region for Lambda functions (should match your database region)
 aws_region = "us-east-1"
 
-# Aurora cluster ARN from Part 5 (leave empty - Terraform will find it automatically)
+# Aurora cluster ARN from Part 5 (leave empty - Terraform will automatically read from Part 5's outputs)
 aurora_cluster_arn = ""
 
-# Aurora secret ARN from Part 5 (leave empty - Terraform will find it automatically)
+# Aurora secret ARN from Part 5 (leave empty - Terraform will automatically read from Part 5's outputs)
 aurora_secret_arn = ""
 
 # S3 Vectors bucket name from Part 3
@@ -336,7 +334,7 @@ polygon_api_key = "your_polygon_api_key_here"
 polygon_plan = "free"
 ```
 
-**Note**: The Aurora ARNs can be left empty - Terraform will automatically find them using data sources. Make sure to update the `vector_bucket` with your actual AWS account ID and add your Polygon API key.
+**Note**: The Aurora ARNs can be left empty - Terraform will automatically read them from Part 5's Terraform outputs using remote state. If Part 5 hasn't been deployed yet, Terraform will fall back to data source lookups. Make sure to update the `vector_bucket` with your actual AWS account ID and add your Polygon API key.
 
 ## Step 6: Deploy Infrastructure
 
@@ -543,7 +541,7 @@ Expected monthly cost for development: $30-50.
 
 If agents time out:
 1. Check Lambda function timeout settings (should be 60s for agents, 300s for planner)
-2. Verify Bedrock model access in us-west-2
+2. Verify IAM permissions for Bedrock access (models are automatically enabled on first use)
 3. Check CloudWatch logs for specific errors
 
 ### Database Connection Failed
@@ -570,9 +568,10 @@ If you see rate limit errors:
 ### Wrong Model Errors
 
 If you see model not found errors:
-1. Verify Bedrock model access in us-west-2
+1. Verify IAM permissions for Bedrock access (models are automatically enabled on first use)
 2. Check BEDROCK_MODEL_ID environment variable
 3. Ensure using `us.amazon.nova-pro-v1:0` format
+4. The first invocation will automatically enable the model in your account
 
 ### Empty Results
 

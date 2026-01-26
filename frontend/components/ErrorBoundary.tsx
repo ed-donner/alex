@@ -1,5 +1,4 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import Link from 'next/link';
 
 interface Props {
   children: ReactNode;

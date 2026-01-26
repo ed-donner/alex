@@ -54,7 +54,7 @@ async def run_research_agent(topic: str = None) -> str:
     # bedrock/openai.gpt-oss-120b-1:0 for OpenAI OSS models
     # bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0 for Claude Sonnet 4
     # NOTE that nova-pro is needed to support tools and MCP servers; nova-lite is not enough - thank you Yuelin L.!
-    MODEL = "bedrock/us.amazon.nova-pro-v1:0"
+    MODEL = "bedrock/amazon.nova-pro-v1:0"
     model = LitellmModel(model=MODEL)
 
     # Create and run the agent with MCP server

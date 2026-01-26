@@ -93,7 +93,8 @@ def run_monte_carlo_simulation(
     real_estate_return_std = 0.12
 
     successful_scenarios = 0
-    final_values = []
+    final_values = []  # After retirement withdrawals
+    values_at_retirement = []  # At retirement (before withdrawals start)
     years_lasted = []
 
     for _ in range(num_simulations):
@@ -114,6 +115,10 @@ def run_monte_carlo_simulation(
 
             portfolio_value = portfolio_value * (1 + portfolio_return)
             portfolio_value += 10000  # Annual contribution
+
+        # Store value at retirement (before withdrawals start)
+        value_at_retirement = portfolio_value
+        values_at_retirement.append(value_at_retirement)
 
         # Retirement phase
         retirement_years = 30
@@ -151,6 +156,7 @@ def run_monte_carlo_simulation(
 
     # Calculate statistics
     final_values.sort()
+    values_at_retirement.sort()  # Sort for percentile calculation
     success_rate = (successful_scenarios / num_simulations) * 100
 
     # Calculate expected value at retirement
@@ -168,8 +174,8 @@ def run_monte_carlo_simulation(
     return {
         "success_rate": round(success_rate, 1),
         "median_final_value": round(final_values[num_simulations // 2], 2),
-        "percentile_10": round(final_values[num_simulations // 10], 2),
-        "percentile_90": round(final_values[9 * num_simulations // 10], 2),
+        "percentile_10": round(values_at_retirement[num_simulations // 10], 2),  # Value at retirement
+        "percentile_90": round(values_at_retirement[9 * num_simulations // 10], 2),  # Value at retirement
         "average_years_lasted": round(sum(years_lasted) / len(years_lasted), 1),
         "expected_value_at_retirement": round(expected_value_at_retirement, 2),
     }
@@ -284,9 +290,9 @@ def create_agent(
 ## Monte Carlo Simulation Results (500 scenarios)
 - Success Rate: {monte_carlo["success_rate"]}% (probability of sustaining retirement income for 30 years)
 - Expected Portfolio Value at Retirement: ${monte_carlo["expected_value_at_retirement"]:,.0f}
-- 10th Percentile Outcome: ${monte_carlo["percentile_10"]:,.0f} (worst case)
-- Median Final Value: ${monte_carlo["median_final_value"]:,.0f}
-- 90th Percentile Outcome: ${monte_carlo["percentile_90"]:,.0f} (best case)
+- 10th Percentile Value at Retirement: ${monte_carlo["percentile_10"]:,.0f} (worst-case scenario at retirement)
+- Median Final Value (after 30 years): ${monte_carlo["median_final_value"]:,.0f}
+- 90th Percentile Value at Retirement: ${monte_carlo["percentile_90"]:,.0f} (best-case scenario at retirement)
 - Average Years Portfolio Lasts: {monte_carlo["average_years_lasted"]} years
 
 ## Key Projections (Milestones)

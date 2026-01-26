@@ -231,7 +231,9 @@ def main():
         import httpx
     except ImportError:
         print("\n📦 Installing httpx for health checks...")
-        subprocess.run(["uv", "add", "httpx"], check=True)
+        # Run from scripts directory where pyproject.toml exists
+        scripts_dir = Path(__file__).parent
+        subprocess.run(["uv", "add", "httpx"], cwd=scripts_dir, check=True)
 
     # Start services
     backend_proc = start_backend()

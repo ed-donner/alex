@@ -99,24 +99,58 @@ def deploy_lambda(zip_path):
     import boto3
     
     lambda_client = boto3.client('lambda')
+    s3_client = boto3.client('s3')
     function_name = 'alex-tagger'
     
     print(f"Deploying to Lambda function: {function_name}")
     
+    # Check file size (Lambda direct upload limit is ~50MB, but we use 70MB as threshold)
+    file_size = zip_path.stat().st_size
+    size_mb = file_size / (1024 * 1024)
+    max_direct_upload = 70 * 1024 * 1024  # 70 MB
+    
     try:
-        # Try to update existing function
-        with open(zip_path, 'rb') as f:
+        if file_size > max_direct_upload:
+            # Package is too large, must use S3
+            print(f"Package size ({size_mb:.1f} MB) exceeds direct upload limit, using S3...")
+            
+            # Get AWS account ID
+            sts_client = boto3.client('sts')
+            account_id = sts_client.get_caller_identity()['Account']
+            bucket_name = f"alex-lambda-packages-{account_id}"
+            key = 'tagger/tagger_lambda.zip'
+            
+            # Upload to S3
+            print(f"Uploading to S3: s3://{bucket_name}/{key}")
+            with open(zip_path, 'rb') as f:
+                s3_client.upload_fileobj(f, bucket_name, key)
+            print(f"✅ Uploaded to S3")
+            
+            # Update Lambda from S3
+            print("Updating Lambda function from S3...")
             response = lambda_client.update_function_code(
                 FunctionName=function_name,
-                ZipFile=f.read()
+                S3Bucket=bucket_name,
+                S3Key=key
             )
-        print(f"Successfully updated Lambda function: {function_name}")
-        print(f"Function ARN: {response['FunctionArn']}")
+        else:
+            # Small enough for direct upload
+            print(f"Uploading directly ({size_mb:.1f} MB)...")
+            with open(zip_path, 'rb') as f:
+                response = lambda_client.update_function_code(
+                    FunctionName=function_name,
+                    ZipFile=f.read()
+                )
+        
+        print(f"✅ Successfully updated Lambda function: {function_name}")
+        print(f"   Function ARN: {response['FunctionArn']}")
+        print(f"   Last modified: {response['LastModified']}")
+        
     except lambda_client.exceptions.ResourceNotFoundException:
-        print(f"Lambda function {function_name} not found. Please deploy via Terraform first.")
+        print(f"❌ Lambda function {function_name} not found. Please deploy via Terraform first.")
         sys.exit(1)
     except Exception as e:
-        print(f"Error deploying Lambda: {e}")
+        print(f"❌ Error deploying Lambda: {e}")
         sys.exit(1)
 
 def main():

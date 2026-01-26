@@ -46,6 +46,14 @@ interface Instrument {
   sector_allocation?: Record<string, number>;
 }
 
+interface JobListItem {
+  id: string;
+  created_at: string;
+  completed_at?: string;
+  status: string;
+  job_type: string;
+}
+
 export default function Dashboard() {
   const { user, isLoaded: userLoaded } = useUser();
   const { getToken } = useAuth();
@@ -192,9 +200,37 @@ export default function Dashboard() {
           setInstruments(instrumentsMap);
         }
 
-        // Get last analysis date
-        // This would come from the jobs endpoint in a real implementation
-        setLastAnalysisDate(null);
+        // Get last analysis date from completed jobs
+        try {
+          const jobsResponse = await fetch(`${API_URL}/api/jobs`, {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+            },
+          });
+
+          if (jobsResponse.ok) {
+            const jobsData = await jobsResponse.json();
+            const jobs = jobsData.jobs || [];
+            
+            // Find the latest completed job
+            const latestCompletedJob = jobs
+              .filter((job: JobListItem) => job.status === 'completed')
+              .sort((a: JobListItem, b: JobListItem) => {
+                const dateA = a.completed_at || a.created_at;
+                const dateB = b.completed_at || b.created_at;
+                return new Date(dateB).getTime() - new Date(dateA).getTime();
+              })[0];
+
+            if (latestCompletedJob) {
+              // Use completed_at if available, otherwise created_at
+              const analysisDate = latestCompletedJob.completed_at || latestCompletedJob.created_at;
+              setLastAnalysisDate(analysisDate);
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching last analysis date:", err);
+          // Don't fail the whole page load if this fails
+        }
 
       } catch (err) {
         console.error("Error loading data:", err);
@@ -260,6 +296,31 @@ export default function Dashboard() {
           setInstruments(instrumentsData);
 
           // Portfolio will be recalculated on render
+        }
+
+        // Refresh last analysis date
+        const jobsResponse = await fetch(`${API_URL}/api/jobs`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+
+        if (jobsResponse.ok) {
+          const jobsData = await jobsResponse.json();
+          const jobs = jobsData.jobs || [];
+          
+          const latestCompletedJob = jobs
+            .filter((job: JobListItem) => job.status === 'completed')
+            .sort((a: JobListItem, b: JobListItem) => {
+              const dateA = a.completed_at || a.created_at;
+              const dateB = b.completed_at || b.created_at;
+              return new Date(dateB).getTime() - new Date(dateA).getTime();
+            })[0];
+
+          if (latestCompletedJob) {
+            const analysisDate = latestCompletedJob.completed_at || latestCompletedJob.created_at;
+            setLastAnalysisDate(analysisDate);
+          }
         }
       } catch (err) {
         console.error("Error refreshing dashboard data:", err);

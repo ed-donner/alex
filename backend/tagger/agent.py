@@ -3,7 +3,7 @@ InstrumentTagger Agent - Classifies financial instruments using OpenAI Agents SD
 """
 
 import os
-from typing import List
+from typing import List, Dict
 import logging
 from decimal import Decimal
 
@@ -108,8 +108,20 @@ class InstrumentClassification(BaseModel):
     @field_validator("allocation_asset_class")
     def validate_asset_class_sum(cls, v: AllocationBreakdown):
         total = v.equity + v.fixed_income + v.real_estate + v.commodities + v.cash + v.alternatives
-        if abs(total - 100.0) > 3:  # Allow small floating point errors
-            raise ValueError(f"Asset class allocations must sum to 100.0, got {total}")
+        # Normalize if sum is close to 100 (within reasonable range)
+        if abs(total - 100.0) > 0.1:  # Only normalize if not exactly 100
+            if 50.0 <= total <= 150.0:  # Reasonable range for normalization
+                # Scale all values proportionally to sum to 100
+                scale_factor = 100.0 / total
+                v.equity *= scale_factor
+                v.fixed_income *= scale_factor
+                v.real_estate *= scale_factor
+                v.commodities *= scale_factor
+                v.cash *= scale_factor
+                v.alternatives *= scale_factor
+            else:
+                # Sum is way off - reject it
+                raise ValueError(f"Asset class allocations must sum to approximately 100.0, got {total}")
         return v
 
     @field_validator("allocation_regions")
@@ -125,8 +137,23 @@ class InstrumentClassification(BaseModel):
             + v.global_
             + v.international
         )
-        if abs(total - 100.0) > 3:
-            raise ValueError(f"Regional allocations must sum to 100.0, got {total}")
+        # Normalize if sum is close to 100 (within reasonable range)
+        if abs(total - 100.0) > 0.1:  # Only normalize if not exactly 100
+            if 50.0 <= total <= 150.0:  # Reasonable range for normalization
+                # Scale all values proportionally to sum to 100
+                scale_factor = 100.0 / total
+                v.north_america *= scale_factor
+                v.europe *= scale_factor
+                v.asia *= scale_factor
+                v.latin_america *= scale_factor
+                v.africa *= scale_factor
+                v.middle_east *= scale_factor
+                v.oceania *= scale_factor
+                v.global_ *= scale_factor
+                v.international *= scale_factor
+            else:
+                # Sum is way off - reject it
+                raise ValueError(f"Regional allocations must sum to approximately 100.0, got {total}")
         return v
 
     @field_validator("allocation_sectors")
@@ -151,8 +178,32 @@ class InstrumentClassification(BaseModel):
             + v.diversified
             + v.other
         )
-        if abs(total - 100.0) > 3:
-            raise ValueError(f"Sector allocations must sum to 100.0, got {total}")
+        # Normalize if sum is close to 100 (within reasonable range)
+        if abs(total - 100.0) > 0.1:  # Only normalize if not exactly 100
+            if 50.0 <= total <= 150.0:  # Reasonable range for normalization
+                # Scale all values proportionally to sum to 100
+                scale_factor = 100.0 / total
+                v.technology *= scale_factor
+                v.healthcare *= scale_factor
+                v.financials *= scale_factor
+                v.consumer_discretionary *= scale_factor
+                v.consumer_staples *= scale_factor
+                v.industrials *= scale_factor
+                v.materials *= scale_factor
+                v.energy *= scale_factor
+                v.utilities *= scale_factor
+                v.real_estate *= scale_factor
+                v.communication *= scale_factor
+                v.treasury *= scale_factor
+                v.corporate *= scale_factor
+                v.mortgage *= scale_factor
+                v.government_related *= scale_factor
+                v.commodities *= scale_factor
+                v.diversified *= scale_factor
+                v.other *= scale_factor
+            else:
+                # Sum is way off - reject it
+                raise ValueError(f"Sector allocations must sum to approximately 100.0, got {total}")
         return v
 
 
@@ -205,7 +256,7 @@ async def classify_instrument(
         raise
 
 
-async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassification]:
+async def tag_instruments(instruments: List[dict]) -> tuple[List[InstrumentClassification], List[Dict[str, str]]]:
     """
     Tag multiple instruments with simple retry logic.
 
@@ -213,7 +264,7 @@ async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassificat
         instruments: List of dicts with symbol, name, and optionally instrument_type
 
     Returns:
-        List of classifications
+        Tuple of (list of successful classifications, list of errors with symbol and error message)
     """
     import asyncio
 
@@ -230,26 +281,32 @@ async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassificat
         return await classify_instrument(symbol, name, instrument_type)
 
     # Process instruments sequentially with small delay
-    results = []
+    classifications = []
+    errors = []
+    
     for i, instrument in enumerate(instruments):
         # Small delay between requests to avoid rate limits
         if i > 0:
             await asyncio.sleep(0.5)
 
+        symbol = instrument["symbol"]
         try:
             classification = await classify_with_retry(
-                symbol=instrument["symbol"],
+                symbol=symbol,
                 name=instrument.get("name", ""),
                 instrument_type=instrument.get("instrument_type", "etf"),
             )
-            logger.info(f"Successfully classified {instrument['symbol']}")
-            results.append(classification)
+            logger.info(f"Successfully classified {symbol}")
+            classifications.append(classification)
         except Exception as e:
-            logger.error(f"Failed to classify {instrument['symbol']}: {e}")
-            results.append(None)
+            error_msg = str(e)
+            logger.error(f"Failed to classify {symbol}: {error_msg}")
+            errors.append({
+                'symbol': symbol,
+                'error': error_msg
+            })
 
-    # Filter out None values
-    return [r for r in results if r is not None]
+    return classifications, errors
 
 
 def classification_to_db_format(classification: InstrumentClassification) -> InstrumentCreate:

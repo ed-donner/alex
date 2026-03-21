@@ -18,6 +18,7 @@ import json
 import time
 from pathlib import Path
 
+NPM_CMD = "npm.cmd" if os.name == "nt" else "npm"
 
 def run_command(cmd, cwd=None, check=True, capture_output=False, env=None):
     """Run a command and optionally capture output."""
@@ -50,7 +51,8 @@ def check_prerequisites():
 
     for tool, message in tools.items():
         try:
-            run_command([tool, "--version"], capture_output=True)
+            cmd = [NPM_CMD, "--version"] if tool == "npm" else [tool, "--version"]
+            run_command(cmd, capture_output=True)
             print(f"  ✅ {tool} is installed")
         except (subprocess.CalledProcessError, FileNotFoundError):
             print(f"  ❌ {message}")
@@ -110,7 +112,7 @@ def build_frontend(api_url=None):
     node_modules = frontend_dir / "node_modules"
     if not node_modules.exists():
         print("  Installing dependencies...")
-        run_command(["npm", "install"], cwd=frontend_dir)
+        run_command([NPM_CMD, "install"], cwd=frontend_dir)
 
     # If API URL is provided, create .env.production.local to override .env.local
     if api_url:
@@ -152,7 +154,7 @@ def build_frontend(api_url=None):
     # Set NODE_ENV to production to ensure .env.production is used
     build_env = os.environ.copy()
     build_env["NODE_ENV"] = "production"
-    run_command(["npm", "run", "build"], cwd=frontend_dir, env=build_env)
+    run_command([NPM_CMD, "run", "build"], cwd=frontend_dir, env=build_env)
 
     # Verify the build
     out_dir = frontend_dir / "out"

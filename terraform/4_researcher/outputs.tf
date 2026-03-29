@@ -27,7 +27,7 @@ output "setup_instructions" {
     Service URL: https://${aws_apprunner_service.researcher.service_url}
     
     Test the researcher:
-    curl https://${aws_apprunner_service.researcher.service_url}/research
+    curl https://${aws_apprunner_service.researcher.service_url}/
     
     ${var.scheduler_enabled ? "⏰ Automated research is running every 2 hours" : "💡 To enable automated research, set scheduler_enabled = true"}
     

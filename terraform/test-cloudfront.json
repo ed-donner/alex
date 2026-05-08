@@ -1,0 +1,32 @@
+{
+  "CallerReference": "terraform-bypass-test-$(date +%s)",
+  "Comment": "Test CloudFront creation bypass",
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "test-origin",
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "MinTTL": 0,
+    "ForwardedValues": {
+      "QueryString": false,
+      "Cookies": {"Forward": "none"}
+    },
+    "TrustedSigners": {
+      "Enabled": false,
+      "Quantity": 0
+    }
+  },
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "Id": "test-origin",
+        "DomainName": "httpbin.org",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "https-only"
+        }
+      }
+    ]
+  },
+  "Enabled": true
+}

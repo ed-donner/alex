@@ -1,13 +1,13 @@
 terraform {
   required_version = ">= 1.5"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
   }
-  
+
   # Using local backend - state will be stored in terraform.tfstate in this directory
   # This is automatically gitignored for security
 }
@@ -25,17 +25,17 @@ data "aws_caller_identity" "current" {}
 
 resource "aws_sqs_queue" "analysis_jobs" {
   name                       = "alex-analysis-jobs"
-  delay_seconds             = 0
-  max_message_size          = 262144
-  message_retention_seconds = 86400  # 1 day
-  receive_wait_time_seconds = 10     # Long polling
+  delay_seconds              = 0
+  max_message_size           = 262144
+  message_retention_seconds  = 86400 # 1 day
+  receive_wait_time_seconds  = 10    # Long polling
   visibility_timeout_seconds = 910   # 15 minutes + 10 seconds buffer (matches Planner Lambda timeout)
-  
+
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.analysis_jobs_dlq.arn
     maxReceiveCount     = 3
   })
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
@@ -44,7 +44,7 @@ resource "aws_sqs_queue" "analysis_jobs" {
 
 resource "aws_sqs_queue" "analysis_jobs_dlq" {
   name = "alex-analysis-jobs-dlq"
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
@@ -70,7 +70,7 @@ resource "aws_iam_role" "lambda_agents_role" {
       }
     ]
   })
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
@@ -81,7 +81,7 @@ resource "aws_iam_role" "lambda_agents_role" {
 resource "aws_iam_role_policy" "lambda_agents_policy" {
   name = "alex-lambda-agents-policy"
   role = aws_iam_role.lambda_agents_role.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -192,7 +192,7 @@ resource "aws_iam_role_policy_attachment" "lambda_agents_basic" {
 # S3 bucket for Lambda packages (packages > 50MB must use S3)
 resource "aws_s3_bucket" "lambda_packages" {
   bucket = "alex-lambda-packages-${data.aws_caller_identity.current.account_id}"
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
@@ -202,12 +202,12 @@ resource "aws_s3_bucket" "lambda_packages" {
 # Upload Lambda packages to S3
 resource "aws_s3_object" "lambda_packages" {
   for_each = toset(["planner", "tagger", "reporter", "charter", "retirement"])
-  
+
   bucket = aws_s3_bucket.lambda_packages.id
   key    = "${each.key}/${each.key}_lambda.zip"
   source = "${path.module}/../../backend/${each.key}/${each.key}_lambda.zip"
   etag   = fileexists("${path.module}/../../backend/${each.key}/${each.key}_lambda.zip") ? filemd5("${path.module}/../../backend/${each.key}/${each.key}_lambda.zip") : null
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
@@ -223,17 +223,17 @@ resource "aws_s3_object" "lambda_packages" {
 resource "aws_lambda_function" "planner" {
   function_name = "alex-planner"
   role          = aws_iam_role.lambda_agents_role.arn
-  
+
   # Using S3 for deployment package (>50MB)
   s3_bucket        = aws_s3_bucket.lambda_packages.id
   s3_key           = aws_s3_object.lambda_packages["planner"].key
   source_code_hash = fileexists("${path.module}/../../backend/planner/planner_lambda.zip") ? filebase64sha256("${path.module}/../../backend/planner/planner_lambda.zip") : null
-  
+
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
   timeout     = 900  # 15 minutes for planner
-  memory_size = 2048  # 2GB for planner
-  
+  memory_size = 2048 # 2GB for planner
+
   environment {
     variables = {
       AURORA_CLUSTER_ARN = var.aurora_cluster_arn
@@ -242,6 +242,8 @@ resource "aws_lambda_function" "planner" {
       VECTOR_BUCKET      = var.vector_bucket
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
+      MODEL_PROVIDER     = var.model_provider
+      OPENAI_MODEL_ID    = var.openai_model_id
       DEFAULT_AWS_REGION = var.aws_region
       SAGEMAKER_ENDPOINT = var.sagemaker_endpoint
       POLYGON_API_KEY    = var.polygon_api_key
@@ -259,7 +261,7 @@ resource "aws_lambda_function" "planner" {
     Part    = "6"
     Agent   = "orchestrator"
   }
-  
+
   depends_on = [aws_s3_object.lambda_packages["planner"]]
 }
 
@@ -282,7 +284,7 @@ resource "aws_lambda_function" "tagger" {
 
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 300  # 5 minutes for tagger
+  timeout     = 300 # 5 minutes for tagger
   memory_size = 1024
 
   environment {
@@ -292,6 +294,8 @@ resource "aws_lambda_function" "tagger" {
       DATABASE_NAME      = "alex"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
+      MODEL_PROVIDER     = var.model_provider
+      OPENAI_MODEL_ID    = var.openai_model_id
       DEFAULT_AWS_REGION = var.aws_region
       # LangFuse observability (optional)
       LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
@@ -300,13 +304,13 @@ resource "aws_lambda_function" "tagger" {
       OPENAI_API_KEY      = var.openai_api_key
     }
   }
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
     Agent   = "tagger"
   }
-  
+
   depends_on = [aws_s3_object.lambda_packages["tagger"]]
 }
 
@@ -314,17 +318,17 @@ resource "aws_lambda_function" "tagger" {
 resource "aws_lambda_function" "reporter" {
   function_name = "alex-reporter"
   role          = aws_iam_role.lambda_agents_role.arn
-  
+
   # Using S3 for deployment package (>50MB)
   s3_bucket        = aws_s3_bucket.lambda_packages.id
   s3_key           = aws_s3_object.lambda_packages["reporter"].key
   source_code_hash = fileexists("${path.module}/../../backend/reporter/reporter_lambda.zip") ? filebase64sha256("${path.module}/../../backend/reporter/reporter_lambda.zip") : null
-  
+
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 300  # 5 minutes for reporter agent
+  timeout     = 300 # 5 minutes for reporter agent
   memory_size = 1024
-  
+
   environment {
     variables = {
       AURORA_CLUSTER_ARN = var.aurora_cluster_arn
@@ -332,6 +336,8 @@ resource "aws_lambda_function" "reporter" {
       DATABASE_NAME      = "alex"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
+      MODEL_PROVIDER     = var.model_provider
+      OPENAI_MODEL_ID    = var.openai_model_id
       DEFAULT_AWS_REGION = var.aws_region
       SAGEMAKER_ENDPOINT = var.sagemaker_endpoint
       # LangFuse observability (optional)
@@ -347,7 +353,7 @@ resource "aws_lambda_function" "reporter" {
     Part    = "6"
     Agent   = "reporter"
   }
-  
+
   depends_on = [aws_s3_object.lambda_packages["reporter"]]
 }
 
@@ -355,17 +361,17 @@ resource "aws_lambda_function" "reporter" {
 resource "aws_lambda_function" "charter" {
   function_name = "alex-charter"
   role          = aws_iam_role.lambda_agents_role.arn
-  
+
   # Using S3 for deployment package (>50MB)
   s3_bucket        = aws_s3_bucket.lambda_packages.id
   s3_key           = aws_s3_object.lambda_packages["charter"].key
   source_code_hash = fileexists("${path.module}/../../backend/charter/charter_lambda.zip") ? filebase64sha256("${path.module}/../../backend/charter/charter_lambda.zip") : null
-  
+
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 300  # 5 minutes for charter agent
+  timeout     = 300 # 5 minutes for charter agent
   memory_size = 1024
-  
+
   environment {
     variables = {
       AURORA_CLUSTER_ARN = var.aurora_cluster_arn
@@ -373,6 +379,8 @@ resource "aws_lambda_function" "charter" {
       DATABASE_NAME      = "alex"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
+      MODEL_PROVIDER     = var.model_provider
+      OPENAI_MODEL_ID    = var.openai_model_id
       DEFAULT_AWS_REGION = var.aws_region
       # LangFuse observability (optional)
       LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
@@ -387,7 +395,7 @@ resource "aws_lambda_function" "charter" {
     Part    = "6"
     Agent   = "charter"
   }
-  
+
   depends_on = [aws_s3_object.lambda_packages["charter"]]
 }
 
@@ -395,17 +403,17 @@ resource "aws_lambda_function" "charter" {
 resource "aws_lambda_function" "retirement" {
   function_name = "alex-retirement"
   role          = aws_iam_role.lambda_agents_role.arn
-  
+
   # Using S3 for deployment package (>50MB)
   s3_bucket        = aws_s3_bucket.lambda_packages.id
   s3_key           = aws_s3_object.lambda_packages["retirement"].key
   source_code_hash = fileexists("${path.module}/../../backend/retirement/retirement_lambda.zip") ? filebase64sha256("${path.module}/../../backend/retirement/retirement_lambda.zip") : null
-  
+
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 300  # 5 minutes for retirement agent
+  timeout     = 300 # 5 minutes for retirement agent
   memory_size = 1024
-  
+
   environment {
     variables = {
       AURORA_CLUSTER_ARN = var.aurora_cluster_arn
@@ -413,6 +421,8 @@ resource "aws_lambda_function" "retirement" {
       DATABASE_NAME      = "alex"
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
+      MODEL_PROVIDER     = var.model_provider
+      OPENAI_MODEL_ID    = var.openai_model_id
       DEFAULT_AWS_REGION = var.aws_region
       # LangFuse observability (optional)
       LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
@@ -427,17 +437,17 @@ resource "aws_lambda_function" "retirement" {
     Part    = "6"
     Agent   = "retirement"
   }
-  
+
   depends_on = [aws_s3_object.lambda_packages["retirement"]]
 }
 
 # CloudWatch Log Groups
 resource "aws_cloudwatch_log_group" "agent_logs" {
   for_each = toset(["planner", "tagger", "reporter", "charter", "retirement"])
-  
+
   name              = "/aws/lambda/alex-${each.key}"
   retention_in_days = 7
-  
+
   tags = {
     Project = "alex"
     Part    = "6"

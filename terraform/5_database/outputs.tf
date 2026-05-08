@@ -30,7 +30,7 @@ output "data_api_enabled" {
 
 output "setup_instructions" {
   description = "Instructions for setting up the database"
-  value = <<-EOT
+  value       = <<-EOT
     
     ✅ Aurora Serverless v2 cluster deployed successfully!
     

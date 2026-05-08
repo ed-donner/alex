@@ -441,7 +441,12 @@ export default function Dashboard() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                    <Tooltip
+                      formatter={(value) => {
+                        const n = typeof value === "number" ? value : Number(value);
+                        return Number.isFinite(n) ? `$${n.toLocaleString("en-US")}` : "";
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

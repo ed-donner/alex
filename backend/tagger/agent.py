@@ -28,6 +28,23 @@ BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", "us-west-2")
 
 
+def create_model():
+    """Create the configured model, defaulting to Bedrock unless OpenAI is selected."""
+    model_provider = os.getenv("MODEL_PROVIDER", "bedrock").lower()
+    if model_provider == "openai":
+        model_id = os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini")
+        logger.info(f"Tagger: Using OpenAI model {model_id}")
+        return model_id
+
+    model_id = BEDROCK_MODEL_ID
+    bedrock_region = os.getenv("BEDROCK_REGION", BEDROCK_REGION)
+    os.environ["AWS_REGION_NAME"] = bedrock_region
+    os.environ["AWS_REGION"] = bedrock_region
+    os.environ["AWS_DEFAULT_REGION"] = bedrock_region
+    logger.info(f"Tagger: Using Bedrock model {model_id} in {bedrock_region}")
+    return LitellmModel(model=f"bedrock/{model_id}")
+
+
 class AllocationBreakdown(BaseModel):
     """Allocation percentages that must sum to 100"""
 
@@ -171,14 +188,7 @@ async def classify_instrument(
         Complete classification with allocations
     """
     try:
-        # Initialize the model
-        model_id = BEDROCK_MODEL_ID
-
-        # Set region for LiteLLM Bedrock calls
-        bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
-        os.environ["AWS_REGION_NAME"] = bedrock_region
-
-        model = LitellmModel(model=f"bedrock/{model_id}")
+        model = create_model()
 
         # Create the classification task
         task = CLASSIFICATION_PROMPT.format(

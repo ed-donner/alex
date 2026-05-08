@@ -337,6 +337,12 @@ export default function Analysis() {
     };
 
     // Dynamically render all charts provided by the charter agent
+    const formatCurrency = (value: unknown) => {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) return '';
+      return `$${n.toLocaleString('en-US')}`;
+    };
+
     const chartEntries = Object.entries(chartsPayload);
 
     return (
@@ -371,7 +377,7 @@ export default function Analysis() {
                         <Cell key={`cell-${idx}`} fill={entry.color || COLORS[idx % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => `$${value.toLocaleString('en-US')}`} />
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
                   </PieChart>
                 ) : chartType === 'horizontalBar' ? (
                   // For horizontal bars, just use regular vertical bars with rotated labels
@@ -391,7 +397,7 @@ export default function Analysis() {
                     <YAxis
                       tickFormatter={(value) => `$${(value/1000).toFixed(0)}k`}
                     />
-                    <Tooltip formatter={(value: number) => `$${value.toLocaleString('en-US')}`} />
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
                     <Bar dataKey="value">
                       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {chartData.data?.map((entry: any, index: number) => (
@@ -404,7 +410,7 @@ export default function Analysis() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
                     <YAxis tickFormatter={(value) => `$${(value/1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(value: number) => `$${value.toLocaleString('en-US')}`} />
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
                     <Bar dataKey="value" fill={chartData.color || COLORS[0]} />
                   </BarChart>
                 ) : (
@@ -413,7 +419,7 @@ export default function Analysis() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey={chartData.xKey || "year"} />
                     <YAxis tickFormatter={(value) => `$${(value/1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(value: number) => `$${value.toLocaleString('en-US')}`} />
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
                     <Line type="monotone" dataKey="value" stroke={COLORS[0]} strokeWidth={2} />
                   </LineChart>
                 )}

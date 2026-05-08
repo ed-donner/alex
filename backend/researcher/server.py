@@ -41,24 +41,28 @@ async def run_research_agent(topic: str = None) -> str:
     else:
         query = DEFAULT_RESEARCH_PROMPT
 
-    # LiteLLM needs AWS_REGION_NAME for Bedrock calls; keep boto3 env vars aligned.
-    region = os.getenv("BEDROCK_REGION", "us-west-2")
-    os.environ["AWS_REGION_NAME"] = region  # LiteLLM's preferred variable
-    os.environ["AWS_REGION"] = region  # Boto3 standard
-    os.environ["AWS_DEFAULT_REGION"] = region  # Fallback
+    model_provider = os.getenv("MODEL_PROVIDER", "bedrock").lower()
+    if model_provider == "openai":
+        model = os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini")
+    else:
+        # LiteLLM needs AWS_REGION_NAME for Bedrock calls; keep boto3 env vars aligned.
+        region = os.getenv("BEDROCK_REGION", "us-west-2")
+        os.environ["AWS_REGION_NAME"] = region  # LiteLLM's preferred variable
+        os.environ["AWS_REGION"] = region  # Boto3 standard
+        os.environ["AWS_DEFAULT_REGION"] = region  # Fallback
 
-    # Please override BEDROCK_MODEL_ID with the model you are using
-    # Common choices: bedrock/eu.amazon.nova-pro-v1:0 for EU and bedrock/us.amazon.nova-pro-v1:0 for US
-    # or bedrock/amazon.nova-pro-v1:0 if you are not using inference profiles
-    # bedrock/openai.gpt-oss-120b-1:0 for OpenAI OSS models
-    # bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0 for Claude Sonnet 4
-    # NOTE that nova-pro is needed to support tools and MCP servers; nova-lite is not enough - thank you Yuelin L.!
-    model_id = os.getenv("BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0")
-    model = LitellmModel(model=f"bedrock/{model_id}")
+        # Please override BEDROCK_MODEL_ID with the model you are using
+        # Common choices: bedrock/eu.amazon.nova-pro-v1:0 for EU and bedrock/us.amazon.nova-pro-v1:0 for US
+        # or bedrock/amazon.nova-pro-v1:0 if you are not using inference profiles
+        # bedrock/openai.gpt-oss-120b-1:0 for OpenAI OSS models
+        # bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0 for Claude Sonnet 4
+        # NOTE that nova-pro is needed to support tools and MCP servers; nova-lite is not enough - thank you Yuelin L.!
+        model_id = os.getenv("BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0")
+        model = LitellmModel(model=f"bedrock/{model_id}")
 
     # Create and run the agent with MCP server
     with trace("Researcher"):
-        async with create_playwright_mcp_server(timeout_seconds=60) as playwright_mcp:
+        async with create_playwright_mcp_server(timeout_seconds=120) as playwright_mcp:
             agent = Agent(
                 name="Alex Investment Researcher",
                 instructions=get_agent_instructions(),
@@ -67,7 +71,7 @@ async def run_research_agent(topic: str = None) -> str:
                 mcp_servers=[playwright_mcp],
             )
 
-            result = await Runner.run(agent, input=query, max_turns=15)
+            result = await Runner.run(agent, input=query, max_turns=30)
 
     return result.final_output
 
@@ -145,6 +149,8 @@ async def health():
         "timestamp": datetime.now(UTC).isoformat(),
         "debug_container": container_indicators,
         "aws_region": os.environ.get("AWS_DEFAULT_REGION", "not set"),
+        "model_provider": os.getenv("MODEL_PROVIDER", "bedrock"),
+        "openai_model": os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini"),
         "bedrock_region": os.getenv("BEDROCK_REGION", "us-west-2"),
         "bedrock_model": f"bedrock/{os.getenv('BEDROCK_MODEL_ID', 'us.amazon.nova-pro-v1:0')}",
     }
@@ -156,8 +162,26 @@ async def test_bedrock():
     try:
         import boto3
 
+        model_provider = os.getenv("MODEL_PROVIDER", "bedrock").lower()
         region = os.getenv("BEDROCK_REGION", "us-west-2")
         model_id = os.getenv("BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0")
+
+        if model_provider == "openai":
+            model = os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini")
+            agent = Agent(
+                name="Test Agent",
+                instructions="You are a helpful assistant. Be very brief.",
+                model=model,
+            )
+
+            result = await Runner.run(agent, input="Say hello in 5 words or less", max_turns=1)
+
+            return {
+                "status": "success",
+                "model_provider": model_provider,
+                "model": model,
+                "response": result.final_output,
+            }
 
         # Set ALL region environment variables
         os.environ["AWS_REGION_NAME"] = region

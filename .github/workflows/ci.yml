@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform-fmt:
+    name: Terraform fmt (check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive terraform
+
+  python-local-tests:
+    name: Python local tests (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - backend/planner
+          - backend/tagger
+          - backend/reporter
+          - backend/charter
+          - backend/retirement
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - name: Sync dependencies
+        working-directory: ${{ matrix.project }}
+        run: uv sync
+      - name: Run local test script
+        working-directory: ${{ matrix.project }}
+        env:
+          MOCK_LAMBDAS: "true"
+          DEFAULT_AWS_REGION: "us-east-1"
+          AWS_REGION: "us-east-1"
+        run: uv run test_simple.py
+
+  frontend-build:
+    name: Frontend lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.12.2"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Build
+        working-directory: frontend
+        env:
+          NODE_ENV: production
+        run: npm run build

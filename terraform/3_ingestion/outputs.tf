@@ -1,6 +1,11 @@
 output "vector_bucket_name" {
   description = "Name of the S3 Vectors bucket"
-  value       = aws_s3_bucket.vectors.id
+  value       = aws_s3vectors_vector_bucket.vectors.vector_bucket_name
+}
+
+output "vector_index_name" {
+  description = "Name of the S3 Vectors index"
+  value       = aws_s3vectors_index.financial_research.index_name
 }
 
 output "api_endpoint" {
@@ -21,12 +26,12 @@ output "api_key_value" {
 
 output "setup_instructions" {
   description = "Instructions for setting up environment variables"
-  value = <<-EOT
+  value       = <<-EOT
     
     ✅ Ingestion pipeline deployed successfully!
     
     Add the following to your .env file:
-    VECTOR_BUCKET=${aws_s3_bucket.vectors.id}
+    VECTOR_BUCKET=${aws_s3vectors_vector_bucket.vectors.vector_bucket_name}
     ALEX_API_ENDPOINT=${aws_api_gateway_stage.api.invoke_url}/ingest
     
     To get your API key value:
@@ -39,6 +44,6 @@ output "setup_instructions" {
     curl -X POST ${aws_api_gateway_stage.api.invoke_url}/ingest \
       -H "x-api-key: <your-api-key>" \
       -H "Content-Type: application/json" \
-      -d '{"content": "Test document", "metadata": {"source": "test"}}'
+      -d '{"text": "Test document", "metadata": {"source": "test"}}'
   EOT
 }

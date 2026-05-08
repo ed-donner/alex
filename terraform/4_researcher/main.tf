@@ -1,13 +1,13 @@
 terraform {
   required_version = ">= 1.5"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
   }
-  
+
   # Using local backend - state will be stored in terraform.tfstate in this directory
   # This is automatically gitignored for security
 }
@@ -27,12 +27,12 @@ data "aws_caller_identity" "current" {}
 resource "aws_ecr_repository" "researcher" {
   name                 = "alex-researcher"
   image_tag_mutability = "MUTABLE"
-  force_delete         = true  # Allow deletion even with images
-  
+  force_delete         = true # Allow deletion even with images
+
   image_scanning_configuration {
     scan_on_push = false
   }
-  
+
   tags = {
     Project = "alex"
     Part    = "4"
@@ -46,7 +46,7 @@ resource "aws_ecr_repository" "researcher" {
 # IAM role for App Runner
 resource "aws_iam_role" "app_runner_role" {
   name = "alex-app-runner-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -66,7 +66,7 @@ resource "aws_iam_role" "app_runner_role" {
       }
     ]
   })
-  
+
   tags = {
     Project = "alex"
     Part    = "4"
@@ -82,7 +82,7 @@ resource "aws_iam_role_policy_attachment" "app_runner_ecr_access" {
 # IAM role for App Runner instance (runtime access to AWS services)
 resource "aws_iam_role" "app_runner_instance_role" {
   name = "alex-app-runner-instance-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -95,7 +95,7 @@ resource "aws_iam_role" "app_runner_instance_role" {
       }
     ]
   })
-  
+
   tags = {
     Project = "alex"
     Part    = "4"
@@ -106,13 +106,16 @@ resource "aws_iam_role" "app_runner_instance_role" {
 resource "aws_iam_role_policy" "app_runner_instance_bedrock_access" {
   name = "alex-app-runner-instance-bedrock-policy"
   role = aws_iam_role.app_runner_instance_role.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow"
         Action = [
+          "bedrock:Converse",
+          "bedrock:ConverseStream",
+          "bedrock:GetInferenceProfile",
           "bedrock:InvokeModel",
           "bedrock:InvokeModelWithResponseStream",
           "bedrock:ListFoundationModels"
@@ -126,35 +129,37 @@ resource "aws_iam_role_policy" "app_runner_instance_bedrock_access" {
 # App Runner service
 resource "aws_apprunner_service" "researcher" {
   service_name = "alex-researcher"
-  
+
   source_configuration {
     auto_deployments_enabled = false
-    
+
     # Configure authentication for private ECR repository
     authentication_configuration {
       access_role_arn = aws_iam_role.app_runner_role.arn
     }
-    
+
     image_repository {
-      image_identifier      = "${aws_ecr_repository.researcher.repository_url}:latest"
+      image_identifier = "${aws_ecr_repository.researcher.repository_url}:latest"
       image_configuration {
         port = "8000"
         runtime_environment_variables = {
           OPENAI_API_KEY    = var.openai_api_key
           ALEX_API_ENDPOINT = var.alex_api_endpoint
           ALEX_API_KEY      = var.alex_api_key
+          BEDROCK_REGION    = var.bedrock_region
+          BEDROCK_MODEL_ID  = var.bedrock_model_id
         }
       }
       image_repository_type = "ECR"
     }
   }
-  
+
   instance_configuration {
-    cpu    = "1 vCPU"
-    memory = "2 GB"
+    cpu               = "1 vCPU"
+    memory            = "2 GB"
     instance_role_arn = aws_iam_role.app_runner_instance_role.arn
   }
-  
+
   tags = {
     Project = "alex"
     Part    = "4"
@@ -169,7 +174,7 @@ resource "aws_apprunner_service" "researcher" {
 resource "aws_iam_role" "eventbridge_role" {
   count = var.scheduler_enabled ? 1 : 0
   name  = "alex-eventbridge-scheduler-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -182,7 +187,7 @@ resource "aws_iam_role" "eventbridge_role" {
       }
     ]
   })
-  
+
   tags = {
     Project = "alex"
     Part    = "4"
@@ -194,22 +199,22 @@ resource "aws_lambda_function" "scheduler_lambda" {
   count         = var.scheduler_enabled ? 1 : 0
   function_name = "alex-researcher-scheduler"
   role          = aws_iam_role.lambda_scheduler_role[0].arn
-  
+
   # Note: The deployment package will be created by the guide instructions
   filename         = "${path.module}/../../backend/scheduler/lambda_function.zip"
   source_code_hash = fileexists("${path.module}/../../backend/scheduler/lambda_function.zip") ? filebase64sha256("${path.module}/../../backend/scheduler/lambda_function.zip") : null
-  
+
   handler     = "lambda_function.handler"
   runtime     = "python3.12"
-  timeout     = 180  # 3 minutes to handle App Runner response time
+  timeout     = 180 # 3 minutes to handle App Runner response time
   memory_size = 256
-  
+
   environment {
     variables = {
       APP_RUNNER_URL = aws_apprunner_service.researcher.service_url
     }
   }
-  
+
   tags = {
     Project = "alex"
     Part    = "4"
@@ -220,7 +225,7 @@ resource "aws_lambda_function" "scheduler_lambda" {
 resource "aws_iam_role" "lambda_scheduler_role" {
   count = var.scheduler_enabled ? 1 : 0
   name  = "alex-scheduler-lambda-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -233,7 +238,7 @@ resource "aws_iam_role" "lambda_scheduler_role" {
       }
     ]
   })
-  
+
   tags = {
     Project = "alex"
     Part    = "4"
@@ -251,13 +256,13 @@ resource "aws_iam_role_policy_attachment" "lambda_scheduler_basic" {
 resource "aws_scheduler_schedule" "research_schedule" {
   count = var.scheduler_enabled ? 1 : 0
   name  = "alex-research-schedule"
-  
+
   flexible_time_window {
     mode = "OFF"
   }
-  
+
   schedule_expression = "rate(2 hours)"
-  
+
   target {
     arn      = aws_lambda_function.scheduler_lambda[0].arn
     role_arn = aws_iam_role.eventbridge_role[0].arn
@@ -279,7 +284,7 @@ resource "aws_iam_role_policy" "eventbridge_invoke_lambda" {
   count = var.scheduler_enabled ? 1 : 0
   name  = "InvokeLambdaPolicy"
   role  = aws_iam_role.eventbridge_role[0].id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

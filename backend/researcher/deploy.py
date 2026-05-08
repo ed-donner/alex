@@ -11,8 +11,9 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv(override=True)
+# Load environment variables from the project root .env file regardless of cwd.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 
 def run_command(cmd, capture_output=False, shell=False):
@@ -193,6 +194,8 @@ def main():
                                             "ALEX_API_ENDPOINT": os.environ.get(
                                                 "ALEX_API_ENDPOINT", ""
                                             ),
+                                            "BEDROCK_REGION": os.environ.get("BEDROCK_REGION", ""),
+                                            "BEDROCK_MODEL_ID": os.environ.get("BEDROCK_MODEL_ID", ""),
                                         },
                                     },
                                     "ImageRepositoryType": "ECR",

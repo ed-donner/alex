@@ -20,7 +20,7 @@ output "scheduler_status" {
 
 output "setup_instructions" {
   description = "Instructions for completing setup"
-  value = <<-EOT
+  value       = <<-EOT
     
     ✅ Researcher service deployed successfully!
     

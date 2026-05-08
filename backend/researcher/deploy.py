@@ -7,12 +7,12 @@ Cross-platform deployment script for Mac/Windows/Linux
 import subprocess
 import sys
 import os
-import json
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv(override=True)
+# Load environment variables from the project root .env file regardless of cwd.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 
 def run_command(cmd, capture_output=False, shell=False):
@@ -123,202 +123,56 @@ def main():
 
     print("\n✅ Docker image pushed successfully!")
     print(
-        "\nNext step: Run 'terraform apply' in terraform/4_researcher to create the App Runner service."
+        "\nNext step: Run 'terraform apply' in terraform/4_researcher to create or update the ECS service."
     )
 
-    # Get App Runner service ARN
-    print("\nGetting App Runner service details...")
+    # If the ECS service already exists, trigger a fresh deployment so it pulls latest.
+    print("\nChecking for existing ECS service...")
     try:
-        services = run_command(
+        service_status = run_command(
             [
                 "aws",
-                "apprunner",
-                "list-services",
+                "ecs",
+                "describe-services",
+                "--cluster",
+                "alex-researcher",
+                "--services",
+                "alex-researcher",
                 "--region",
                 region,
                 "--query",
-                "ServiceSummaryList[?ServiceName=='alex-researcher'].ServiceArn",
+                "services[0].status",
                 "--output",
-                "json",
+                "text",
             ],
             capture_output=True,
         )
 
-        if services:
-            service_arns = json.loads(services)
-            if service_arns:
-                service_arn = service_arns[0]
-                print(f"Found service: {service_arn}")
-
-                # Get the current service configuration to preserve the access role
-                print("\nGetting current service configuration...")
-                service_details = run_command(
-                    [
-                        "aws",
-                        "apprunner",
-                        "describe-service",
-                        "--service-arn",
-                        service_arn,
-                        "--region",
-                        region,
-                        "--query",
-                        "Service.SourceConfiguration.AuthenticationConfiguration.AccessRoleArn",
-                        "--output",
-                        "text",
-                    ],
-                    capture_output=True,
-                )
-
-                # Update the service to use the new image with unique tag
-                print(f"\nUpdating service to use new image: {ecr_url}:{image_tag}")
-                run_command(
-                    [
-                        "aws",
-                        "apprunner",
-                        "update-service",
-                        "--service-arn",
-                        service_arn,
-                        "--region",
-                        region,
-                        "--source-configuration",
-                        json.dumps(
-                            {
-                                "ImageRepository": {
-                                    "ImageIdentifier": f"{ecr_url}:{image_tag}",
-                                    "ImageConfiguration": {
-                                        "Port": "8000",
-                                        "RuntimeEnvironmentVariables": {
-                                            "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
-                                            "ALEX_API_KEY": os.environ.get("ALEX_API_KEY", ""),
-                                            "ALEX_API_ENDPOINT": os.environ.get(
-                                                "ALEX_API_ENDPOINT", ""
-                                            ),
-                                        },
-                                    },
-                                    "ImageRepositoryType": "ECR",
-                                },
-                                "AuthenticationConfiguration": {"AccessRoleArn": service_details},
-                                "AutoDeploymentsEnabled": False,
-                            }
-                        ),
-                    ],
-                    capture_output=True,
-                )
-                print("✅ Service updated with new image!")
-
-                # Wait for deployment to complete
-                print("\nWaiting for deployment to complete (this may take 5-10 minutes)...")
-                import time
-
-                max_attempts = 120  # 10 minutes with 5-second intervals
-                attempts = 0
-
-                while attempts < max_attempts:
-                    status = run_command(
-                        [
-                            "aws",
-                            "apprunner",
-                            "describe-service",
-                            "--service-arn",
-                            service_arn,
-                            "--region",
-                            region,
-                            "--query",
-                            "Service.Status",
-                            "--output",
-                            "text",
-                        ],
-                        capture_output=True,
-                    )
-
-                    # Strip any whitespace that might be causing comparison issues
-                    status = status.strip()
-
-                    if status == "RUNNING":
-                        print("\n✅ Deployment complete! Service is running.")
-
-                        # Get and display the service URL
-                        service_url = run_command(
-                            [
-                                "aws",
-                                "apprunner",
-                                "describe-service",
-                                "--service-arn",
-                                service_arn,
-                                "--region",
-                                region,
-                                "--query",
-                                "Service.ServiceUrl",
-                                "--output",
-                                "text",
-                            ],
-                            capture_output=True,
-                        )
-
-                        print(f"\n🚀 Your service is available at:")
-                        print(f"   https://{service_url}")
-                        print(f"\nTest it with:")
-                        print(f"   curl https://{service_url}/health")
-                        break
-                    elif status == "OPERATION_IN_PROGRESS":
-                        # Check operation status for more details
-                        operation_status = run_command(
-                            [
-                                "aws",
-                                "apprunner",
-                                "list-operations",
-                                "--service-arn",
-                                service_arn,
-                                "--region",
-                                region,
-                                "--query",
-                                "OperationSummaryList[0].Status",
-                                "--output",
-                                "text",
-                            ],
-                            capture_output=True,
-                        ).strip()
-
-                        if operation_status == "SUCCEEDED":
-                            # Operation completed but service status might not be updated yet
-                            print("\n⏳ Operation succeeded, checking service status...")
-                            time.sleep(2)
-                            continue
-                        elif operation_status == "FAILED":
-                            print(f"\n❌ Deployment failed!")
-                            print("Check the AWS Console for error details.")
-                            break
-                        else:
-                            print(".", end="", flush=True)
-                            # Show progress every 30 seconds
-                            if attempts > 0 and attempts % 6 == 0:
-                                elapsed_minutes = (attempts * 5) / 60
-                                print(
-                                    f" ({elapsed_minutes:.1f} minutes elapsed)", end="", flush=True
-                                )
-                            time.sleep(5)
-                            attempts += 1
-                    else:
-                        print(f"\n⚠️ Unexpected status: {status}")
-                        print("Check the AWS Console for more details.")
-                        break
-                else:
-                    print("\n⚠️ Deployment is taking longer than expected.")
-                    print("Check the status in the AWS Console.")
-            else:
-                print(
-                    "\nApp Runner service not found. You may need to run 'terraform apply' first."
-                )
-                print("\nTo manually deploy:")
-                print("  1. Go to AWS Console > App Runner")
-                print("  2. Select 'alex-researcher' service")
-                print("  3. Click 'Deploy' to pull the latest image")
+        if service_status and service_status.strip() != "None":
+            print("Found ECS service. Starting a new deployment...")
+            run_command(
+                [
+                    "aws",
+                    "ecs",
+                    "update-service",
+                    "--cluster",
+                    "alex-researcher",
+                    "--service",
+                    "alex-researcher",
+                    "--force-new-deployment",
+                    "--region",
+                    region,
+                ],
+                capture_output=True,
+            )
+            print("✅ ECS service deployment started.")
+        else:
+            print("ECS service not found yet. Run Terraform to create it.")
     except Exception as e:
         print(f"\nCouldn't automatically start deployment: {e}")
-        print("\nTo manually deploy:")
-        print("  1. Go to AWS Console > App Runner")
-        print("  2. Select 'alex-researcher' service")
-        print("  3. Click 'Deploy' to pull the latest image")
+        print("\nTo deploy manually, run:")
+        print("  cd terraform/4_researcher")
+        print("  terraform apply")
 
 
 if __name__ == "__main__":

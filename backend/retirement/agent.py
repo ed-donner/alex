@@ -17,6 +17,23 @@ logger = logging.getLogger()
 # Context removed - no longer needed without tools
 
 
+def create_model():
+    """Create the configured model, defaulting to Bedrock unless OpenAI is selected."""
+    model_provider = os.getenv("MODEL_PROVIDER", "bedrock").lower()
+    if model_provider == "openai":
+        model_id = os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini")
+        logger.info(f"Retirement: Using OpenAI model {model_id}")
+        return model_id
+
+    model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+    bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
+    os.environ["AWS_REGION_NAME"] = bedrock_region
+    os.environ["AWS_REGION"] = bedrock_region
+    os.environ["AWS_DEFAULT_REGION"] = bedrock_region
+    logger.info(f"Retirement: Using Bedrock model {model_id} in {bedrock_region}")
+    return LitellmModel(model=f"bedrock/{model_id}")
+
+
 def calculate_portfolio_value(portfolio_data: Dict[str, Any]) -> float:
     """Calculate current portfolio value."""
     total_value = 0.0
@@ -238,13 +255,7 @@ def create_agent(
 ):
     """Create the retirement agent with tools and context."""
 
-    # Get model configuration
-    model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
-    # Set region for LiteLLM Bedrock calls
-    bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
-    os.environ["AWS_REGION_NAME"] = bedrock_region
-
-    model = LitellmModel(model=f"bedrock/{model_id}")
+    model = create_model()
 
     # Extract user preferences
     years_until_retirement = user_preferences.get("years_until_retirement", 30)

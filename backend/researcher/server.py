@@ -41,25 +41,28 @@ async def run_research_agent(topic: str = None) -> str:
     else:
         query = DEFAULT_RESEARCH_PROMPT
 
-    # Please override these variables with the region you are using
-    # Other choices: us-west-2 (for OpenAI OSS models) and eu-central-1
-    REGION = "us-east-1"
-    os.environ["AWS_REGION_NAME"] = REGION  # LiteLLM's preferred variable
-    os.environ["AWS_REGION"] = REGION  # Boto3 standard
-    os.environ["AWS_DEFAULT_REGION"] = REGION  # Fallback
+    model_provider = os.getenv("MODEL_PROVIDER", "bedrock").lower()
+    if model_provider == "openai":
+        model = os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini")
+    else:
+        # LiteLLM needs AWS_REGION_NAME for Bedrock calls; keep boto3 env vars aligned.
+        region = os.getenv("BEDROCK_REGION", "us-west-2")
+        os.environ["AWS_REGION_NAME"] = region  # LiteLLM's preferred variable
+        os.environ["AWS_REGION"] = region  # Boto3 standard
+        os.environ["AWS_DEFAULT_REGION"] = region  # Fallback
 
-    # Please override this variable with the model you are using
-    # Common choices: bedrock/eu.amazon.nova-pro-v1:0 for EU and bedrock/us.amazon.nova-pro-v1:0 for US
-    # or bedrock/amazon.nova-pro-v1:0 if you are not using inference profiles
-    # bedrock/openai.gpt-oss-120b-1:0 for OpenAI OSS models
-    # bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0 for Claude Sonnet 4
-    # NOTE that nova-pro is needed to support tools and MCP servers; nova-lite is not enough - thank you Yuelin L.!
-    MODEL = "bedrock/us.amazon.nova-pro-v1:0"
-    model = LitellmModel(model=MODEL)
+        # Please override BEDROCK_MODEL_ID with the model you are using
+        # Common choices: bedrock/eu.amazon.nova-pro-v1:0 for EU and bedrock/us.amazon.nova-pro-v1:0 for US
+        # or bedrock/amazon.nova-pro-v1:0 if you are not using inference profiles
+        # bedrock/openai.gpt-oss-120b-1:0 for OpenAI OSS models
+        # bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0 for Claude Sonnet 4
+        # NOTE that nova-pro is needed to support tools and MCP servers; nova-lite is not enough - thank you Yuelin L.!
+        model_id = os.getenv("BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0")
+        model = LitellmModel(model=f"bedrock/{model_id}")
 
     # Create and run the agent with MCP server
     with trace("Researcher"):
-        async with create_playwright_mcp_server(timeout_seconds=60) as playwright_mcp:
+        async with create_playwright_mcp_server(timeout_seconds=120) as playwright_mcp:
             agent = Agent(
                 name="Alex Investment Researcher",
                 instructions=get_agent_instructions(),
@@ -68,7 +71,7 @@ async def run_research_agent(topic: str = None) -> str:
                 mcp_servers=[playwright_mcp],
             )
 
-            result = await Runner.run(agent, input=query, max_turns=15)
+            result = await Runner.run(agent, input=query, max_turns=30)
 
     return result.final_output
 
@@ -146,7 +149,10 @@ async def health():
         "timestamp": datetime.now(UTC).isoformat(),
         "debug_container": container_indicators,
         "aws_region": os.environ.get("AWS_DEFAULT_REGION", "not set"),
-        "bedrock_model": "bedrock/amazon.nova-pro-v1:0",
+        "model_provider": os.getenv("MODEL_PROVIDER", "bedrock"),
+        "openai_model": os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini"),
+        "bedrock_region": os.getenv("BEDROCK_REGION", "us-west-2"),
+        "bedrock_model": f"bedrock/{os.getenv('BEDROCK_MODEL_ID', 'us.amazon.nova-pro-v1:0')}",
     }
 
 
@@ -156,21 +162,42 @@ async def test_bedrock():
     try:
         import boto3
 
+        model_provider = os.getenv("MODEL_PROVIDER", "bedrock").lower()
+        region = os.getenv("BEDROCK_REGION", "us-west-2")
+        model_id = os.getenv("BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0")
+
+        if model_provider == "openai":
+            model = os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini")
+            agent = Agent(
+                name="Test Agent",
+                instructions="You are a helpful assistant. Be very brief.",
+                model=model,
+            )
+
+            result = await Runner.run(agent, input="Say hello in 5 words or less", max_turns=1)
+
+            return {
+                "status": "success",
+                "model_provider": model_provider,
+                "model": model,
+                "response": result.final_output,
+            }
+
         # Set ALL region environment variables
-        os.environ["AWS_REGION_NAME"] = "us-east-1"
-        os.environ["AWS_REGION"] = "us-east-1"
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+        os.environ["AWS_REGION_NAME"] = region
+        os.environ["AWS_REGION"] = region
+        os.environ["AWS_DEFAULT_REGION"] = region
 
         # Debug: Check what region boto3 is actually using
         session = boto3.Session()
         actual_region = session.region_name
 
-        # Try to create Bedrock client explicitly in us-west-2
-        client = boto3.client("bedrock-runtime", region_name="us-west-2")
+        # Try to create Bedrock client explicitly in the configured region
+        client = boto3.client("bedrock-runtime", region_name=region)
 
         # Debug: Try to list models to verify connection
         try:
-            bedrock_client = boto3.client("bedrock", region_name="us-west-2")
+            bedrock_client = boto3.client("bedrock", region_name=region)
             models = bedrock_client.list_foundation_models()
             openai_models = [
                 m["modelId"] for m in models["modelSummaries"] if "openai" in m["modelId"].lower()
@@ -178,8 +205,8 @@ async def test_bedrock():
         except Exception as list_error:
             openai_models = f"Error listing: {str(list_error)}"
 
-        # Try basic model invocation with Nova Pro
-        model = LitellmModel(model="bedrock/amazon.nova-pro-v1:0")
+        # Try basic model invocation with the configured model
+        model = LitellmModel(model=f"bedrock/{model_id}")
 
         agent = Agent(
             name="Test Agent",

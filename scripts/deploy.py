@@ -317,10 +317,14 @@ def display_deployment_info(outputs):
 
     # Extract values from outputs
     api_url = outputs["api_gateway_url"]["value"]
-    cloudfront_url = outputs["cloudfront_url"]["value"]
+    cloudfront_url = outputs.get("cloudfront_url", {}).get("value")
+    s3_website_url = outputs.get("s3_website_url", {}).get("value")
 
     print(f"\n  ✅ Deployment successful!")
-    print(f"\n  CloudFront URL: {cloudfront_url}")
+    if cloudfront_url:
+        print(f"\n  CloudFront URL: {cloudfront_url}")
+    if s3_website_url:
+        print(f"  S3 Website URL: {s3_website_url}")
     print(f"  API Gateway URL: {api_url}")
     print(f"\n  Note: Your local .env.local file remains unchanged.")
     print(f"  The production build uses .env.production with the AWS API URL.")
@@ -346,21 +350,22 @@ def main():
     # Build frontend with the production API URL
     build_frontend(api_url)
 
-    # Extract CloudFront distribution ID
-    cloudfront_url = outputs["cloudfront_url"]["value"]
-    # Extract distribution ID from CloudFront URL
-    dist_id_output = run_command([
-        "aws", "cloudfront", "list-distributions",
-        "--query", f"DistributionList.Items[?DomainName=='{cloudfront_url.replace('https://', '')}'].Id",
-        "--output", "text"
-    ], capture_output=True)
+    # Extract CloudFront distribution ID (optional)
+    cloudfront_url = outputs.get("cloudfront_url", {}).get("value")
+    cloudfront_id = None
+    if cloudfront_url:
+        dist_id_output = run_command([
+            "aws", "cloudfront", "list-distributions",
+            "--query", f"DistributionList.Items[?DomainName=='{cloudfront_url.replace('https://', '')}'].Id",
+            "--output", "text"
+        ], capture_output=True)
 
-    if not dist_id_output:
-        print("  ⚠️  Could not find CloudFront distribution ID")
-        print("  You'll need to manually invalidate the cache")
-        cloudfront_id = None
-    else:
-        cloudfront_id = dist_id_output
+        if not dist_id_output:
+            print("  ⚠️  Could not find CloudFront distribution ID")
+            print("  You'll need to manually invalidate the cache")
+            cloudfront_id = None
+        else:
+            cloudfront_id = dist_id_output
 
     # Upload frontend
     bucket_name = outputs["s3_bucket_name"]["value"]
@@ -381,10 +386,16 @@ def main():
     print("\n" + "=" * 50)
     print("✅ Deployment complete!")
     print(f"\n🌐 Your application is available at:")
-    print(f"   {outputs['cloudfront_url']['value']}")
+    if outputs.get("cloudfront_url", {}).get("value"):
+        print(f"   {outputs['cloudfront_url']['value']}")
+    elif outputs.get("s3_website_url", {}).get("value"):
+        print(f"   {outputs['s3_website_url']['value']}")
+    else:
+        print("   (no public URL output found)")
     print(f"\n📊 Monitor your Lambda function at:")
     print(f"   AWS Console > Lambda > {outputs['lambda_function_name']['value']}")
-    print("\n⏳ Note: CloudFront distribution may take 5-10 minutes to fully propagate")
+    if outputs.get("cloudfront_url", {}).get("value"):
+        print("\n⏳ Note: CloudFront distribution may take 5-10 minutes to fully propagate")
 
 
 if __name__ == "__main__":

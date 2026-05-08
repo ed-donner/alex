@@ -9,41 +9,24 @@ import sys
 import json
 import requests
 import argparse
+from pathlib import Path
 
 
 def get_service_url():
-    """Get the App Runner service URL from AWS."""
+    """Get the ECS Fargate service URL from Terraform output."""
     try:
-        # Get service ARN first
-        result = subprocess.run([
-            "aws", "apprunner", "list-services",
-            "--query", "ServiceSummaryList[?ServiceName=='alex-researcher'].ServiceArn",
-            "--output", "json"
-        ], capture_output=True, text=True, check=True)
-        
-        service_arns = json.loads(result.stdout)
-        if not service_arns:
-            print("❌ App Runner service 'alex-researcher' not found.")
-            print("   Have you deployed it yet? Run: python deploy.py")
-            sys.exit(1)
-        
-        service_arn = service_arns[0]
-        
-        # Get service URL
-        result = subprocess.run([
-            "aws", "apprunner", "describe-service",
-            "--service-arn", service_arn,
-            "--query", "Service.ServiceUrl",
-            "--output", "text"
-        ], capture_output=True, text=True, check=True)
-        
+        terraform_dir = Path(__file__).resolve().parents[2] / "terraform" / "4_researcher"
+        result = subprocess.run(
+            ["terraform", "output", "-raw", "researcher_service_url"],
+            cwd=terraform_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         print(f"❌ Error getting service URL: {e}")
-        print("   Make sure AWS CLI is configured and you have the right permissions.")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"❌ Error parsing AWS response: {e}")
+        print("   Make sure terraform/4_researcher has been applied successfully.")
         sys.exit(1)
 
 
@@ -53,19 +36,19 @@ def test_research(topic=None):
     display_topic = topic if topic else "Agent's choice (trending topic)"
     
     # Get service URL
-    print("Getting App Runner service URL...")
+    print("Getting ECS service URL...")
     service_url = get_service_url()
     
     if not service_url:
         print("❌ Could not get service URL")
         sys.exit(1)
     
-    print(f"✅ Found service at: https://{service_url}")
+    print(f"✅ Found service at: {service_url}")
     
     # Test health endpoint first
     print("\nChecking service health...")
     try:
-        health_url = f"https://{service_url}/health"
+        health_url = f"{service_url}/health"
         response = requests.get(health_url, timeout=10)
         response.raise_for_status()
         print("✅ Service is healthy")
@@ -79,7 +62,7 @@ def test_research(topic=None):
     print("   This will take 20-30 seconds as the agent researches and analyzes...")
     
     try:
-        research_url = f"https://{service_url}/research"
+        research_url = f"{service_url}/research"
         # Only include topic in payload if it's provided
         payload = {"topic": display_topic} if display_topic else {}
         response = requests.post(

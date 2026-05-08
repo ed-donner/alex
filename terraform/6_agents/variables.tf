@@ -28,6 +28,18 @@ variable "bedrock_region" {
   type        = string
 }
 
+variable "model_provider" {
+  description = "Model provider for agents: bedrock or openai"
+  type        = string
+  default     = "bedrock"
+}
+
+variable "openai_model_id" {
+  description = "OpenAI model ID to use when model_provider is openai"
+  type        = string
+  default     = "gpt-4.1-mini"
+}
+
 variable "sagemaker_endpoint" {
   description = "SageMaker endpoint name from Part 2"
   type        = string

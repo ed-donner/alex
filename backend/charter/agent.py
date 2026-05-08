@@ -13,6 +13,23 @@ from templates import CHARTER_INSTRUCTIONS, create_charter_task
 logger = logging.getLogger()
 
 
+def create_model():
+    """Create the configured model, defaulting to Bedrock unless OpenAI is selected."""
+    model_provider = os.getenv("MODEL_PROVIDER", "bedrock").lower()
+    if model_provider == "openai":
+        model_id = os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini")
+        logger.info(f"Charter: Using OpenAI model {model_id}")
+        return model_id
+
+    model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+    bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
+    os.environ["AWS_REGION_NAME"] = bedrock_region
+    os.environ["AWS_REGION"] = bedrock_region
+    os.environ["AWS_DEFAULT_REGION"] = bedrock_region
+    logger.info(f"Charter: Using Bedrock model {model_id} in {bedrock_region}")
+    return LitellmModel(model=f"bedrock/{model_id}")
+
+
 def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:
     """
     Analyze the portfolio to understand its composition and calculate key metrics.
@@ -140,16 +157,9 @@ def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:
 def create_agent(job_id: str, portfolio_data: Dict[str, Any], db=None):
     """Create the charter agent without tools - will output JSON directly."""
     
-    # Get model configuration
-    model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
-    # Set region for LiteLLM Bedrock calls
-    bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
-    os.environ["AWS_REGION_NAME"] = bedrock_region
-    
-    logger.info(f"Charter: Creating agent with model_id={model_id}, region={bedrock_region}")
     logger.info(f"Charter: Job ID: {job_id}")
     
-    model = LitellmModel(model=f"bedrock/{model_id}")
+    model = create_model()
     
     # Analyze the portfolio upfront
     portfolio_analysis = analyze_portfolio(portfolio_data)

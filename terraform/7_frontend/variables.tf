@@ -4,6 +4,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "enable_cloudfront" {
+  description = "Whether to create a CloudFront distribution in front of the S3 site and API"
+  type        = bool
+  default     = true
+}
+
 # Clerk validation happens in Lambda, not at API Gateway level
 variable "clerk_jwks_url" {
   description = "Clerk JWKS URL for JWT validation in Lambda"

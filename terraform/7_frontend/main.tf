@@ -45,6 +45,12 @@ locals {
   }
 }
 
+# Optional CloudFront (some AWS accounts must be verified first)
+locals {
+  cloudfront_domain = try(aws_cloudfront_distribution.main[0].domain_name, "")
+  cors_origins      = var.enable_cloudfront ? "http://localhost:3000,https://${local.cloudfront_domain}" : "http://localhost:3000,http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
+}
+
 # S3 bucket for frontend static website
 resource "aws_s3_bucket" "frontend" {
   bucket = "${local.name_prefix}-frontend-${data.aws_caller_identity.current.account_id}"
@@ -218,7 +224,7 @@ resource "aws_lambda_function" "api" {
       CLERK_ISSUER   = var.clerk_issuer
 
       # CORS configuration
-      CORS_ORIGINS = "http://localhost:3000,https://${aws_cloudfront_distribution.main.domain_name}"
+      CORS_ORIGINS = local.cors_origins
     }
   }
 
@@ -226,8 +232,7 @@ resource "aws_lambda_function" "api" {
   depends_on = [
     aws_iam_role_policy.api_lambda_aurora,
     aws_iam_role_policy.api_lambda_sqs,
-    aws_iam_role_policy.api_lambda_invoke,
-    aws_cloudfront_distribution.main
+    aws_iam_role_policy.api_lambda_invoke
   ]
 }
 
@@ -293,6 +298,7 @@ resource "aws_lambda_permission" "api_gw" {
 
 # CloudFront distribution
 resource "aws_cloudfront_distribution" "main" {
+  count               = var.enable_cloudfront ? 1 : 0
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"

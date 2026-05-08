@@ -26,6 +26,23 @@ RETIREMENT_FUNCTION = os.getenv("RETIREMENT_FUNCTION", "alex-retirement")
 MOCK_LAMBDAS = os.getenv("MOCK_LAMBDAS", "false").lower() == "true"
 
 
+def create_model():
+    """Create the configured model, defaulting to Bedrock unless OpenAI is selected."""
+    model_provider = os.getenv("MODEL_PROVIDER", "bedrock").lower()
+    if model_provider == "openai":
+        model_id = os.getenv("OPENAI_MODEL_ID", "gpt-4.1-mini")
+        logger.info(f"Planner: Using OpenAI model {model_id}")
+        return model_id
+
+    model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
+    bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
+    os.environ["AWS_REGION_NAME"] = bedrock_region
+    os.environ["AWS_REGION"] = bedrock_region
+    os.environ["AWS_DEFAULT_REGION"] = bedrock_region
+    logger.info(f"Planner: Using Bedrock model {model_id} in {bedrock_region}")
+    return LitellmModel(model=f"bedrock/{model_id}")
+
+
 @dataclass
 class PlannerContext:
     """Context for planner agent tools."""
@@ -262,13 +279,7 @@ def create_agent(job_id: str, portfolio_summary: Dict[str, Any], db):
     # Create context for tools
     context = PlannerContext(job_id=job_id)
 
-    # Get model configuration
-    model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
-    # Set region for LiteLLM Bedrock calls
-    bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
-    os.environ["AWS_REGION_NAME"] = bedrock_region
-
-    model = LitellmModel(model=f"bedrock/{model_id}")
+    model = create_model()
 
     tools = [
         invoke_reporter,

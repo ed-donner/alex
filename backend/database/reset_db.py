@@ -5,7 +5,10 @@ Drops all tables, recreates schema, and loads seed data
 """
 
 import sys
+import subprocess
 import argparse
+
+sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
 from src.client import DataAPIClient
 from src.models import Database
@@ -162,30 +165,25 @@ def main():
         
         # Run migrations
         print("\n📝 Running migrations...")
-        import subprocess
-        result = subprocess.run(['uv', 'run', 'run_migrations.py'], 
-                              capture_output=True, text=True)
-        
+        result = subprocess.run(['uv', 'run', 'run_migrations.py'],
+                                capture_output=True, text=True)
         if result.returncode != 0:
             print("❌ Migration failed!")
             print(result.stderr)
             sys.exit(1)
         else:
             print("✅ Migrations completed")
-    
+
     # Load seed data
     print("\n🌱 Loading seed data...")
-    import subprocess
-    result = subprocess.run(['uv', 'run', 'seed_data.py'], 
-                          capture_output=True, text=True)
-    
+    result = subprocess.run(['uv', 'run', 'seed_data.py'],
+                            capture_output=True, text=True)
     if result.returncode != 0:
         print("❌ Seed data failed!")
         print(result.stderr)
         sys.exit(1)
     else:
-        # Extract instrument count from output
-        if '22/22 instruments loaded' in result.stdout:
+        if result.stdout and '22/22 instruments loaded' in result.stdout:
             print("✅ Loaded 22 instruments")
         else:
             print("✅ Seed data loaded")

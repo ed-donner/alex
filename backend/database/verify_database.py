@@ -15,8 +15,11 @@ Note: JSONB values are stored as floats (100.0) not strings ('100')
 """
 
 import os
+import sys
 import boto3
 import json
+
+sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv

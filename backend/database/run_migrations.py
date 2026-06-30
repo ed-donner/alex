@@ -4,7 +4,10 @@ Simple migration runner that executes statements one by one
 """
 
 import os
+import sys
 import boto3
+
+sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv

@@ -9,6 +9,8 @@ import json
 import os
 import sys
 from botocore.exceptions import ClientError
+
+sys.stdout.reconfigure(encoding="utf-8")
 from dotenv import load_dotenv
 
 # Load environment variables

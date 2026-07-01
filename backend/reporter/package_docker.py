@@ -8,6 +8,7 @@ import sys
 import shutil
 import tempfile
 import subprocess
+import zipfile
 import argparse
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from pathlib import Path
 def run_command(cmd, cwd=None):
     """Run a command and capture output."""
     print(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding='utf-8', errors='replace')
     if result.returncode != 0:
         print(f"Error: {result.stderr}")
         sys.exit(1)
@@ -89,9 +90,12 @@ def package_lambda():
         if zip_path.exists():
             zip_path.unlink()
 
-        # Create new zip
+        # Create new zip using Python's zipfile (cross-platform, no zip CLI needed)
         print(f"Creating zip file: {zip_path}")
-        run_command(["zip", "-r", str(zip_path), "."], cwd=str(package_dir))
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for file in package_dir.rglob('*'):
+                if file.is_file():
+                    zf.write(file, file.relative_to(package_dir))
 
         # Get file size
         size_mb = zip_path.stat().st_size / (1024 * 1024)

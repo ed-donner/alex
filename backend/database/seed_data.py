@@ -5,8 +5,11 @@ Loads 20+ popular ETF instruments with allocation data
 """
 
 import os
+import sys
 import json
 import boto3
+
+sys.stdout.reconfigure(encoding="utf-8")
 from botocore.exceptions import ClientError
 from src.schemas import InstrumentCreate
 from pydantic import ValidationError

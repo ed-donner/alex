@@ -11,6 +11,9 @@ import signal
 import time
 from pathlib import Path
 
+# On Windows, npm/node are .cmd files and need shell=True to be found
+IS_WINDOWS = sys.platform == "win32"
+
 # Track subprocesses for cleanup
 processes = []
 
@@ -43,7 +46,7 @@ def check_requirements():
 
     # Check npm
     try:
-        result = subprocess.run(["npm", "--version"], capture_output=True, text=True)
+        result = subprocess.run(["npm", "--version"], capture_output=True, text=True, shell=IS_WINDOWS)
         npm_version = result.stdout.strip()
         checks.append(f"✅ npm: {npm_version}")
     except FileNotFoundError:
@@ -138,7 +141,7 @@ def start_frontend():
     # Check if dependencies are installed
     if not (frontend_dir / "node_modules").exists():
         print("  Installing frontend dependencies...")
-        subprocess.run(["npm", "install"], cwd=frontend_dir, check=True)
+        subprocess.run(["npm", "install"], cwd=frontend_dir, check=True, shell=IS_WINDOWS)
 
     # Start the frontend
     proc = subprocess.Popen(
@@ -147,30 +150,30 @@ def start_frontend():
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,  # Combine stderr with stdout
         text=True,
-        bufsize=1
+        bufsize=1,
+        shell=IS_WINDOWS
     )
     processes.append(proc)
 
     # Wait for frontend to start
     print("  Waiting for frontend to start...")
     import httpx
-    import select
+    import threading
 
-    started = False
+    # Read frontend output in a background thread (select.select doesn't work on Windows pipes)
+    started_flag = {"started": False}
+
+    def read_output():
+        for line in proc.stdout:
+            print(f"    Frontend: {line.strip()}")
+            if "ready" in line.lower() or "compiled" in line.lower() or "started server" in line.lower():
+                started_flag["started"] = True
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+
     for i in range(30):  # 30 second timeout
-        # Check for any output from the process using non-blocking read
-        if proc.stdout:
-            ready, _, _ = select.select([proc.stdout], [], [], 0)
-            if ready:
-                line = proc.stdout.readline()
-                if line:
-                    print(f"    Frontend: {line.strip()}")
-                    # NextJS dev server prints "Ready" when it's ready
-                    if "ready" in line.lower() or "compiled" in line.lower() or "started server" in line.lower():
-                        started = True
-
-        # Also try to connect
-        if started or i > 5:  # Start checking after 5 seconds or when we see "ready"
+        if started_flag["started"] or i > 5:  # Start checking after 5 seconds
             try:
                 response = httpx.get("http://localhost:3000", timeout=1)
                 print("  ✅ Frontend running at http://localhost:3000")

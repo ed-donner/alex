@@ -23,7 +23,7 @@ interface Job {
 }
 
 interface AnalysisProgress {
-  stage: 'idle' | 'starting' | 'planner' | 'parallel' | 'completing' | 'complete' | 'error';
+  stage: 'idle' | 'starting' | 'planner' | 'parallel' | 'completing' | 'complete' | 'error' | 'partial';
   message: string;
   activeAgents: string[];
   error?: string;
@@ -116,6 +116,26 @@ export default function AdvisorTeam() {
             setTimeout(() => {
               router.push(`/analysis?job_id=${jobId}`);
             }, 1500);
+          } else if (job.status === 'max_tokens_exceeded') {
+            setProgress({
+              stage: 'partial',
+              message: 'Analysis partially completed - portfolio too complex',
+              activeAgents: [],
+              error: 'Analysis stopped due to maximum token limit. Your portfolio may be too large or complex for automated analysis. Contact support for assistance.'
+            });
+
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              setPollInterval(null);
+            }
+
+            // Treat as a partial success - still navigate to results page
+            emitAnalysisCompleted(jobId);
+            fetchJobs();
+
+            setTimeout(() => {
+              router.push(`/analysis?job_id=${jobId}`);
+            }, 3000);
           } else if (job.status === 'failed') {
             setProgress({
               stage: 'error',
@@ -250,6 +270,8 @@ export default function AdvisorTeam() {
         return 'text-green-600';
       case 'failed':
         return 'text-red-500';
+      case 'max_tokens_exceeded':
+        return 'text-yellow-600';
       case 'running':
         return 'text-blue-600';
       default:
@@ -396,7 +418,7 @@ export default function AdvisorTeam() {
                         <span className={`text-sm font-medium ${getStatusColor(job.status)}`}>
                           {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
                         </span>
-                        {job.status === 'completed' && (
+                        {(job.status === 'completed' || job.status === 'max_tokens_exceeded') && (
                           <button
                             onClick={() => router.push(`/analysis?job_id=${job.id}`)}
                             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 text-sm font-semibold"

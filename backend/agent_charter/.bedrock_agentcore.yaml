@@ -1,0 +1,41 @@
+default_agent: charter
+agents:
+  charter:
+    name: charter
+    entrypoint: /Users/fotis/Documents/CV/Learning/AI in production/alex/backend/agent_charter/agent.py
+    platform: linux/arm64
+    container_runtime: docker
+    source_path: null
+    aws:
+      execution_role: arn:aws:iam::717174128108:role/agentcore-charter-role
+      execution_role_auto_create: false
+      account: '717174128108'
+      region: us-east-1
+      ecr_repository: 717174128108.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-charter
+      ecr_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+    bedrock_agentcore:
+      agent_id: charter-mxi7b3F18T
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:717174128108:runtime/charter-mxi7b3F18T
+      agent_session_id: null
+    codebuild:
+      project_name: bedrock-agentcore-charter-builder
+      execution_role: arn:aws:iam::717174128108:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-8399e57405
+      source_bucket: bedrock-agentcore-codebuild-sources-717174128108-us-east-1
+    memory:
+      mode: STM_ONLY
+      memory_id: charter_mem-LPolp73HEF
+      memory_arn: arn:aws:bedrock-agentcore:us-east-1:717174128108:memory/charter_mem-LPolp73HEF
+      memory_name: charter_mem
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null

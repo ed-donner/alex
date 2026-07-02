@@ -15,3 +15,20 @@ variable "clerk_issuer" {
   type        = string
   default     = ""  # Not actually used but kept for backwards compatibility
 }
+
+variable "sqlalchemy_database_uri" {
+  description = "SQLAlchemy Database URI for connecting to the PostgreSQL database"
+  type        = string
+}
+
+variable "use_custom_domain" {
+  description = "Attach a custom domain to CloudFront"
+  type        = bool
+  default     = false
+}
+
+variable "root_domain" {
+  description = "Apex domain name, e.g. mydomain.com"
+  type        = string
+  default     = ""
+}

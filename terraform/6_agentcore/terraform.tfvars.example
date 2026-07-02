@@ -1,0 +1,42 @@
+# Part 6: Agent Orchestra Configuration
+# Copy this file to terraform.tfvars and update with your values
+
+# Your AWS region for Lambda functions
+# Should match your database region from Part 5
+aws_region = "us-east-1"
+
+# Aurora cluster ARN from Part 5 (get from Terraform output)
+aurora_cluster_arn = "arn:aws:rds:us-east-1:123456789012:cluster:alex-aurora-cluster"
+
+# Aurora secret ARN from Part 5 (get from Terraform output)
+aurora_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:alex-aurora-credentials-xxxxx"
+
+# S3 Vectors bucket name from Part 3
+# Format: alex-vectors-{your-aws-account-id}
+vector_bucket = "alex-vectors-123456789012"
+
+# Bedrock model configuration
+# Using Amazon Nova Pro model for better reliability
+bedrock_model_id = "us.amazon.nova-pro-v1:0"
+
+# Bedrock region (us-west-2 has the most models available)
+# Note: This can be different from your Lambda region - cross-region calls work fine
+bedrock_region = "us-west-2"
+
+# SageMaker endpoint name from Part 2
+# Default: alex-embedding-endpoint
+sagemaker_endpoint = "alex-embedding-endpoint"
+
+# Polygon.io API configuration for real-time market prices
+# Sign up for free at https://polygon.io (no credit card required)
+polygon_api_key = "your_polygon_api_key_here"
+polygon_plan    = "free"
+
+# LangFuse observability configuration (optional)
+# Leave commented out until we use LangFuse - we start LangFuse in Part 8 / Day 4
+
+# langfuse_public_key = "pk-lf-..." # Add your pk-lf-xxx key here - be sure this is the one that starts pk
+# langfuse_secret_key = "sk-lf-..." # Add your sk-lf-xxx key here - be sure this is the one that starts sk
+# langfuse_host       = "https://us.cloud.langfuse.com"
+# OpenAI API key (required for OpenAI Agents SDK tracing to work - no balance or spend needed)
+# openai_api_key = ""

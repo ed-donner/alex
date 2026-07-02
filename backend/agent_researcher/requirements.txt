@@ -1,0 +1,12 @@
+strands-agents
+strands-agents-tools
+uv
+boto3
+bedrock-agentcore
+bedrock-agentcore-starter-toolkit
+pydantic
+python-dotenv
+psycopg2-binary
+opentelemetry-sdk
+opentelemetry-instrumentation
+sqlalchemy

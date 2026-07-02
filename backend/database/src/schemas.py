@@ -58,7 +58,7 @@ JobType = Literal[
     "instrument_research",
 ]
 
-JobStatus = Literal["pending", "running", "completed", "failed"]
+JobStatus = Literal["pending", "running", "completed", "failed","max_tokens_exceeded"]
 
 AccountType = Literal[
     "401k", "roth_ira", "traditional_ira", "taxable", "529", "hsa", "pension", "other"

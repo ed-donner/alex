@@ -126,7 +126,14 @@ export default function Dashboard() {
         });
 
         if (!userResponse.ok) {
-          throw new Error(`Failed to sync user: ${userResponse.status}`);
+          // Get the error details
+          const errorText = await userResponse.text();
+          console.error("API Error Details:", {
+            status: userResponse.status,
+            statusText: userResponse.statusText,
+            body: errorText
+          });
+          throw new Error(`Failed to sync user: ${userResponse.status} - ${errorText}`);
         }
 
         const response = await userResponse.json();

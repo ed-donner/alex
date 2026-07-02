@@ -2,4 +2,8 @@
 name = "terraform"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "boto3>=1.35.0",
+    "bedrock-agentcore-starter-toolkit>=0.1.0",
+    "bedrock-agentcore>=1.0.3",
+]

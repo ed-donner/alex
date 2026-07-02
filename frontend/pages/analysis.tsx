@@ -103,7 +103,7 @@ export default function Analysis() {
           const jobs: JobListItem[] = data.jobs || [];
           // Find the latest completed job
           const latestCompletedJob = jobs
-            .filter(j => j.status === 'completed')
+            .filter(j => j.status === 'completed' || j.status === 'max_tokens_exceeded')
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
 
           if (latestCompletedJob) {
@@ -235,6 +235,46 @@ export default function Analysis() {
               >
                 Try Another Analysis
               </button>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (job.status === 'max_tokens_exceeded') {
+    return (
+      <Layout>
+        <div className="min-h-screen bg-gray-50 py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="bg-white rounded-lg shadow px-8 py-12">
+              <h2 className="text-2xl font-bold text-yellow-600 mb-4">Analysis Partially Completed</h2>
+              <p className="text-gray-600 mb-4">Your analysis was started but stopped due to portfolio complexity limits.</p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <h3 className="font-semibold text-yellow-800 mb-2">What happened?</h3>
+                <p className="text-sm text-yellow-800 mb-3">Your portfolio is very large or complex, causing the analysis to exceed system limits. This can happen with:</p>
+                <ul className="text-sm text-yellow-800 list-disc list-inside space-y-1">
+                  <li>Portfolios with many different holdings</li>
+                  <li>Complex investment structures</li>
+                  <li>Large amounts of detailed financial data</li>
+                </ul>
+              </div>
+              {job.error_message && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-gray-800">{job.error_message}</p>
+                </div>
+              )}
+              <div className="space-y-3">
+                <button
+                  onClick={() => router.push('/advisor-team')}
+                  className="w-full px-6 py-3 bg-primary text-white rounded-lg hover:bg-blue-600 font-semibold"
+                >
+                  Try a Simpler Analysis
+                </button>
+                <p className="text-sm text-gray-500 text-center">
+                  For assistance with complex portfolios, please contact our support team.
+                </p>
+              </div>
             </div>
           </div>
         </div>

@@ -73,15 +73,24 @@ def update_prices_for_symbols(symbols: Set[str], db) -> None:
     for symbol in symbols_list:
         try:
             price = get_share_price(symbol)
-            if price > 0:
+            if price is not None:
                 price_map[symbol] = price
                 logger.info(f"Market: Retrieved {symbol} price: ${price:.2f}")
             else:
-                logger.warning(f"Market: No price available for {symbol}")
+                logger.warning(f"Market: No price available for {symbol}; "
+                "retaining previous price")
         except Exception as e:
             logger.warning(f"Market: Could not fetch price for {symbol}: {e}")
 
     logger.info(f"Market: Retrieved prices for {len(price_map)}/{len(symbols_list)} symbols")
+
+    # 🚨 If no prices were retrieved at all, skip DB updates entirely
+    if not price_map:
+        logger.warning(
+            "Market: No prices retrieved for any symbols; "
+            "skipping price update and retaining previous prices"
+        )
+        return
 
     # Update database with fetched prices
     for symbol, price in price_map.items():

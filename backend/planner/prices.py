@@ -1,10 +1,11 @@
 from polygon import RESTClient
 from dotenv import load_dotenv
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 from functools import lru_cache
 from datetime import timezone
+from typing import Optional
 
 load_dotenv(override=True)
 
@@ -37,10 +38,10 @@ def get_market_for_prior_date(today):
     return market_data
 
 
-def get_share_price_polygon_eod(symbol) -> float:
+def get_share_price_polygon_eod(symbol) -> Optional[float]:
     today = datetime.now().date().strftime("%Y-%m-%d")
     market_data = get_market_for_prior_date(today)
-    return market_data.get(symbol, 0.0)
+    return market_data.get(symbol)
 
 
 def get_share_price_polygon_min(symbol) -> float:
@@ -49,17 +50,17 @@ def get_share_price_polygon_min(symbol) -> float:
     return result.min.close or result.prev_day.close
 
 
-def get_share_price_polygon(symbol) -> float:
+def get_share_price_polygon(symbol) -> Optional[float]:
     if is_paid_polygon:
         return get_share_price_polygon_min(symbol)
     else:
         return get_share_price_polygon_eod(symbol)
 
 
-def get_share_price(symbol) -> float:
+def get_share_price(symbol) -> Optional[float]:
     if polygon_api_key:
         try:
             return get_share_price_polygon(symbol)
         except Exception as e:
-            print(f"Was not able to use the polygon API due to {e}; using a random number")
-    return float(random.randint(1, 100))
+            print(f"Was not able to use the polygon API due to {e}; ")
+    return None

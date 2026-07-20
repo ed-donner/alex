@@ -273,9 +273,22 @@ Beyond what we've deployed, SageMaker offers:
 
 While your endpoint is running, check its CloudWatch metrics:
 
+**Mac:**
+```bash
+# View invocation metrics
+aws cloudwatch get-metric-statistics --namespace "AWS/SageMaker" --metric-name "Invocations" --dimensions Name=EndpointName,Value=alex-embedding-endpoint --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%S) --end-time $(date -u +%Y-%m-%dT%H:%M:%S) --period 300 --statistics Sum --region $(aws configure get region)
+```
+
+**Linux:**
 ```bash
 # View invocation metrics
 aws cloudwatch get-metric-statistics --namespace "AWS/SageMaker" --metric-name "Invocations" --dimensions Name=EndpointName,Value=alex-embedding-endpoint --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) --end-time $(date -u +%Y-%m-%dT%H:%M:%S) --period 300 --statistics Sum --region $(aws configure get region)
+```
+
+**Windows (PowerShell):**
+```powershell
+# View invocation metrics
+aws cloudwatch get-metric-statistics --namespace "AWS/SageMaker" --metric-name "Invocations" --dimensions Name=EndpointName,Value=alex-embedding-endpoint --start-time (Get-Date).ToUniversalTime().AddHours(-1).ToString("yyyy-MM-ddTHH:mm:ss") --end-time (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss") --period 300 --statistics Sum --region (aws configure get region)
 ```
 
 This shows how SageMaker automatically tracks model usage - essential for MLOps!

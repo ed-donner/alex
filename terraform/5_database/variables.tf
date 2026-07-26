@@ -3,14 +3,14 @@ variable "aws_region" {
   type        = string
 }
 
-variable "min_capacity" {
-  description = "Minimum capacity for Aurora Serverless v2 (in ACUs)"
-  type        = number
-  default     = 0.5
+variable "aurora_cluster_arn" {
+  description = "ARN of the Aurora Express cluster, populated by bootstrap/setup_aurora_express.py via bootstrap.auto.tfvars.json"
+  type        = string
+  default     = ""
 }
 
-variable "max_capacity" {
-  description = "Maximum capacity for Aurora Serverless v2 (in ACUs)"
-  type        = number
-  default     = 1
+variable "database_name" {
+  description = "Application database name"
+  type        = string
+  default     = "alex"
 }

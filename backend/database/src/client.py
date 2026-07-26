@@ -11,6 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from botocore.exceptions import ClientError
 import logging
+from tenacity import retry, stop_after_delay, wait_exponential, retry_if_exception, before_sleep_log
 
 # Try to load .env file if it exists
 try:
@@ -55,9 +56,30 @@ class DataAPIClient:
         self.region = os.environ.get("DEFAULT_AWS_REGION", "us-east-1")
         self.client = boto3.client("rds-data", region_name=self.region)
 
+    @staticmethod
+    def _is_cluster_unavailable(error: Exception) -> bool:
+        if not isinstance(error, ClientError):
+            return False
+        code = error.response.get("Error", {}).get("Code", "")
+        message = error.response.get("Error", {}).get("Message", "")
+        if code == "BadRequestException" and "Communications link failure" in message:
+            return True
+        if code == "InvalidResourceStateException":
+            return True
+        if code == "DatabaseResumingException":
+            return True
+        return False
+
+    @retry(
+        retry=retry_if_exception(_is_cluster_unavailable),
+        stop=stop_after_delay(600),
+        wait=wait_exponential(multiplier=1, min=3, max=10),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     def execute(self, sql: str, parameters: List[Dict] = None) -> Dict:
         """
-        Execute a SQL statement
+        Execute a SQL statement, retrying if Aurora is resuming from paused state.
 
         Args:
             sql: SQL statement to execute
@@ -66,24 +88,18 @@ class DataAPIClient:
         Returns:
             Response from Data API
         """
-        try:
-            kwargs = {
-                "resourceArn": self.cluster_arn,
-                "secretArn": self.secret_arn,
-                "database": self.database,
-                "sql": sql,
-                "includeResultMetadata": True,  # Include column names
-            }
+        kwargs = {
+            "resourceArn": self.cluster_arn,
+            "secretArn": self.secret_arn,
+            "database": self.database,
+            "sql": sql,
+            "includeResultMetadata": True,
+        }
 
-            if parameters:
-                kwargs["parameters"] = parameters
+        if parameters:
+            kwargs["parameters"] = parameters
 
-            response = self.client.execute_statement(**kwargs)
-            return response
-
-        except ClientError as e:
-            logger.error(f"Database error: {e}")
-            raise
+        return self.client.execute_statement(**kwargs)
 
     def query(self, sql: str, parameters: List[Dict] = None) -> List[Dict]:
         """
@@ -234,8 +250,21 @@ class DataAPIClient:
         response = self.execute(sql, parameters)
         return response.get("numberOfRecordsUpdated", 0)
 
+    def wait_for_cluster(self):
+        """Ensure the Aurora cluster is awake by running a lightweight query."""
+        logger.info("Checking if Aurora cluster is available...")
+        self.execute("SELECT 1")
+        logger.info("Aurora cluster is ready.")
+
+    @retry(
+        retry=retry_if_exception(_is_cluster_unavailable),
+        stop=stop_after_delay(600),
+        wait=wait_exponential(multiplier=1, min=3, max=10),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     def begin_transaction(self) -> str:
-        """Begin a database transaction"""
+        """Begin a database transaction, retrying if Aurora is resuming."""
         response = self.client.begin_transaction(
             resourceArn=self.cluster_arn, secretArn=self.secret_arn, database=self.database
         )

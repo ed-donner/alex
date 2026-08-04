@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    awscc = {
+      source  = "hashicorp/awscc"
+      version = "~> 1.0"
+    }
   }
   
   # Using local backend - state will be stored in terraform.tfstate in this directory
@@ -16,6 +20,10 @@ provider "aws" {
   region = var.aws_region
 }
 
+provider "awscc" {
+  region = var.aws_region
+}
+
 # Data source for current caller identity
 data "aws_caller_identity" "current" {}
 
@@ -23,40 +31,20 @@ data "aws_caller_identity" "current" {}
 # S3 Vectors Bucket
 # ========================================
 
-resource "aws_s3_bucket" "vectors" {
-  bucket = "alex-vectors-${data.aws_caller_identity.current.account_id}"
-  
-  tags = {
-    Project = "alex"
-    Part    = "3"
-  }
+# S3 Vectors Bucket
+resource "awscc_s3vectors_vector_bucket" "vectors" {
+  vector_bucket_name = "alex-vectors-${data.aws_caller_identity.current.account_id}"
 }
 
-resource "aws_s3_bucket_versioning" "vectors" {
-  bucket = aws_s3_bucket.vectors.id
-  
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
+# S3 Vectors Index
+resource "awscc_s3vectors_index" "index" {
+  index_name = "financial-research"
+  vector_bucket_name = awscc_s3vectors_vector_bucket.vectors.vector_bucket_name
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "vectors" {
-  bucket = aws_s3_bucket.vectors.id
-  
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "vectors" {
-  bucket = aws_s3_bucket.vectors.id
-  
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  # Required attributes
+  data_type       = "float32"
+  dimension       = 384
+  distance_metric = "cosine"
 }
 
 # ========================================
@@ -106,19 +94,6 @@ resource "aws_iam_role_policy" "lambda_policy" {
       {
         Effect = "Allow"
         Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          aws_s3_bucket.vectors.arn,
-          "${aws_s3_bucket.vectors.arn}/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
           "sagemaker:InvokeEndpoint"
         ]
         Resource = "arn:aws:sagemaker:${var.aws_region}:${data.aws_caller_identity.current.account_id}:endpoint/${var.sagemaker_endpoint_name}"
@@ -131,7 +106,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "s3vectors:GetVectors",
           "s3vectors:DeleteVectors"
         ]
-        Resource = "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${aws_s3_bucket.vectors.id}/index/*"
+        Resource = "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${awscc_s3vectors_vector_bucket.vectors.vector_bucket_name}/index/*"
       }
     ]
   })
@@ -153,7 +128,7 @@ resource "aws_lambda_function" "ingest" {
   
   environment {
     variables = {
-      VECTOR_BUCKET      = aws_s3_bucket.vectors.id
+      VECTOR_BUCKET      = awscc_s3vectors_vector_bucket.vectors.vector_bucket_name
       SAGEMAKER_ENDPOINT = var.sagemaker_endpoint_name
     }
   }

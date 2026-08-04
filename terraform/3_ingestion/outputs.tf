@@ -1,6 +1,6 @@
 output "vector_bucket_name" {
   description = "Name of the S3 Vectors bucket"
-  value       = aws_s3_bucket.vectors.id
+  value       = awscc_s3vectors_vector_bucket.vectors.vector_bucket_name
 }
 
 output "api_endpoint" {
@@ -26,7 +26,7 @@ output "setup_instructions" {
     ✅ Ingestion pipeline deployed successfully!
     
     Add the following to your .env file:
-    VECTOR_BUCKET=${aws_s3_bucket.vectors.id}
+    VECTOR_BUCKET=${awscc_s3vectors_vector_bucket.vectors.vector_bucket_name}
     ALEX_API_ENDPOINT=${aws_api_gateway_stage.api.invoke_url}/ingest
     
     To get your API key value:

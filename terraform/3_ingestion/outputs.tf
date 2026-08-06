@@ -39,6 +39,6 @@ output "setup_instructions" {
     curl -X POST ${aws_api_gateway_stage.api.invoke_url}/ingest \
       -H "x-api-key: <your-api-key>" \
       -H "Content-Type: application/json" \
-      -d '{"content": "Test document", "metadata": {"source": "test"}}'
+      -d '{"content": "Test document", "text":"test text", "metadata": {"source": "test"}}'
   EOT
 }

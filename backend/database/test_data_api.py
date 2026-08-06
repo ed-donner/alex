@@ -128,14 +128,16 @@ def test_data_api(cluster_arn, secret_arn, region):
             resourceArn=cluster_arn,
             secretArn=secret_arn,
             database='alex',
-            sql='SELECT 1 as test_connection, current_timestamp as server_time'
+            sql='SELECT 1 as test_connection, current_timestamp as server_time, version() as db_version'
         )
         
         if response['records']:
             test_val = response['records'][0][0].get('longValue')
             server_time = response['records'][0][1].get('stringValue')
+            db_version = response['records'][0][2].get('stringValue')
             print(f"   ✅ Connection successful!")
             print(f"   Server time: {server_time}")
+            print(f"   Database version: {db_version}")
         else:
             print("   ❌ Query executed but returned no results")
             

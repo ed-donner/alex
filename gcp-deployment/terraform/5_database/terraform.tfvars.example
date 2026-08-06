@@ -1,0 +1,30 @@
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+environment = "dev"
+
+# Network configuration
+create_vpc     = true
+vpc_network_id = ""  # Only set if create_vpc = false
+
+# Database sizing
+db_tier          = "db-custom-2-4096"
+disk_size_gb     = 20
+max_connections  = "100"
+high_availability = false
+
+# Connectivity
+enable_public_ip = false
+authorized_networks = [
+  # {
+  #   name = "office"
+  #   cidr = "203.0.113.0/24"
+  # }
+]
+
+# Read replica (optional)
+create_read_replica = false
+replica_tier        = "db-custom-1-2048"
+
+# Service account for Cloud Run (grants Secret Manager access)
+cloud_run_service_account = "cloud-run-sa@your-gcp-project-id.iam.gserviceaccount.com"
+

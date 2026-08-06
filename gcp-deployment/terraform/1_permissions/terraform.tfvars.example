@@ -1,0 +1,13 @@
+# =============================================================================
+# EXAMPLE TERRAFORM VARIABLES
+# Copy this file to terraform.tfvars and fill in your values
+# =============================================================================
+
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+
+# Optional: Enable GitHub Actions Workload Identity Federation
+enable_github_workload_identity = false
+github_repo                     = "your-username/alex"
+
+environment = "dev"

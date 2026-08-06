@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background with gradient using brand colors -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#209DD7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#753991;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="0.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Rounded rectangle background -->
+  <rect width="32" height="32" rx="6" fill="url(#bg-gradient)"/>
+
+  <!-- Chart bars representing growth -->
+  <g transform="translate(6, 8)">
+    <!-- Bar 1 - shortest -->
+    <rect x="0" y="10" width="4" height="6" fill="#FFB707" opacity="0.9" rx="0.5"/>
+    <!-- Bar 2 - medium -->
+    <rect x="6" y="6" width="4" height="10" fill="#FFB707" opacity="0.9" rx="0.5"/>
+    <!-- Bar 3 - tallest -->
+    <rect x="12" y="2" width="4" height="14" fill="#FFB707" opacity="0.9" rx="0.5"/>
+  </g>
+
+  <!-- Upward trend line with glow effect -->
+  <path d="M 8 20 L 14 14 L 18 12 L 24 6"
+        stroke="white"
+        stroke-width="2"
+        stroke-linecap="round"
+        fill="none"
+        filter="url(#glow)"/>
+
+  <!-- AI nodes/dots representing agents -->
+  <circle cx="8" cy="20" r="2" fill="white"/>
+  <circle cx="14" cy="14" r="2" fill="white"/>
+  <circle cx="18" cy="12" r="2" fill="white"/>
+  <circle cx="24" cy="6" r="2.5" fill="#FFB707"/>
+</svg>

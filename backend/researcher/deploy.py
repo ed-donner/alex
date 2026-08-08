@@ -182,6 +182,7 @@ def main():
         [
             "docker",
             "build",
+            "--provenance=false",
             "--platform",
             "linux/amd64",
             "-t",

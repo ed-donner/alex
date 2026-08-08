@@ -52,7 +52,7 @@ class DataAPIClient:
                 "Set AURORA_CLUSTER_ARN and AURORA_SECRET_ARN environment variables."
             )
 
-        self.region = os.environ.get("DEFAULT_AWS_REGION", "us-east-1")
+        self.region = region or os.environ.get("DEFAULT_AWS_REGION", "us-east-1")
         self.client = boto3.client("rds-data", region_name=self.region)
 
     def execute(self, sql: str, parameters: List[Dict] = None) -> Dict:
@@ -83,6 +83,35 @@ class DataAPIClient:
 
         except ClientError as e:
             logger.error(f"Database error: {e}")
+            raise
+
+    def batch_execute_statement(self, sql: str, parameter_sets: List[List[Dict]] = None) -> Dict:
+        """
+        Execute a SQL statement with multiple sets of parameters (batch execution)
+
+        Args:
+            sql: SQL statement to execute
+            parameter_sets: Optional list of parameter sets for batch execution
+
+        Returns:
+            Response from Data API
+        """
+        try:
+            kwargs = {
+                "resourceArn": self.cluster_arn,
+                "secretArn": self.secret_arn,
+                "database": self.database,
+                "sql": sql,
+            }
+
+            if parameter_sets:
+                kwargs["parameterSets"] = parameter_sets
+
+            response = self.client.batch_execute_statement(**kwargs)
+            return response
+
+        except ClientError as e:
+            logger.error(f"Database batch error: {e}")
             raise
 
     def query(self, sql: str, parameters: List[Dict] = None) -> List[Dict]:

@@ -48,10 +48,12 @@ resource "aws_sagemaker_model" "embedding_model" {
   execution_role_arn = aws_iam_role.sagemaker_role.arn
 
   primary_container {
-    image = var.sagemaker_image_uri
+    # Replace the default DLC region with ours.
+    image = replace(var.sagemaker_image_uri, "us-east-1", var.aws_region)
     environment = {
       HF_MODEL_ID = var.embedding_model_name
       HF_TASK     = "feature-extraction"
+      HF_HUB_ENABLE_HF_TRANSFER = "0"
     }
   }
 

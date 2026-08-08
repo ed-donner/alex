@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, date
 from decimal import Decimal
 from .client import DataAPIClient
+from .unlogged import UnloggedMarketCacheStore
 from .schemas import (
     InstrumentCreate, UserCreate, AccountCreate, 
     PositionCreate, JobCreate, JobUpdate
@@ -310,6 +311,7 @@ class Database:
         self.accounts = Accounts(self.client)
         self.positions = Positions(self.client)
         self.jobs = Jobs(self.client)
+        self.market_cache = UnloggedMarketCacheStore(self.client)
     
     def execute_raw(self, sql: str, parameters: List[Dict] = None) -> Dict:
         """Execute raw SQL for complex queries"""

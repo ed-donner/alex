@@ -5,168 +5,135 @@ Simple migration runner that executes statements one by one
 
 import os
 import sys
-import boto3
-
-sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
+import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
-# Load environment variables
+from loguru import logger
+
+def load_migration_statements(migrations_dir: Path = None) -> list:
+    """
+    Dynamically reads and parses all SQL statements from .sql files in migrations directory.
+    Handles PL/pgSQL dollar-quoted blocks ($$ ... $$) and semicolons.
+    """
+    if migrations_dir is None:
+        migrations_dir = Path(__file__).parent / "migrations"
+
+    statements = []
+    if not migrations_dir.exists():
+        return statements
+
+    sql_files = sorted(migrations_dir.glob("*.sql"))
+
+    for sql_file in sql_files:
+        with open(sql_file, encoding="utf-8") as f:
+            content = f.read()
+
+        # Remove single-line comments (-- ...)
+        lines = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("--"):
+                continue
+            lines.append(line)
+        cleaned_content = "\n".join(lines)
+
+        # Parse statements handling $$ blocks
+        current_parts = []
+        for part in cleaned_content.split(";"):
+            if not part.strip() and not current_parts:
+                continue
+
+            current_parts.append(part)
+            combined = ";".join(current_parts)
+
+            # Count $$ occurrences to prevent splitting inside PL/pgSQL function bodies
+            if combined.count("$$") % 2 != 0:
+                continue
+
+            statement_text = combined.strip()
+            if statement_text:
+                statements.append(statement_text)
+            current_parts = []
+
+    return statements
+
+
+# Fallback/dynamic STATEMENTS loading
+STATEMENTS = load_migration_statements()
+statements = STATEMENTS
+
+# Load environment variables once at module import
 load_dotenv(override=True)
 
-# Get config from environment
-cluster_arn = os.environ.get("AURORA_CLUSTER_ARN")
-secret_arn = os.environ.get("AURORA_SECRET_ARN")
-database = os.environ.get("AURORA_DATABASE", "alex")
-region = os.environ.get("DEFAULT_AWS_REGION", "us-east-1")
 
-if not cluster_arn or not secret_arn:
-    raise ValueError("Missing AURORA_CLUSTER_ARN or AURORA_SECRET_ARN in environment variables")
+def run_migrations(custom_statements: list = None):
+    """
+    Executes database migration statements from .sql files against Aurora Serverless v2 PostgreSQL.
+    """
+    # Get config from environment
+    cluster_arn = os.environ.get("AURORA_CLUSTER_ARN")
+    secret_arn = os.environ.get("AURORA_SECRET_ARN")
+    database = os.environ.get("AURORA_DATABASE", "alex")
+    region = os.environ.get("DEFAULT_AWS_REGION", "us-east-1")
 
-client = boto3.client("rds-data", region_name=region)
+    if not cluster_arn or not secret_arn:
+        raise ValueError("Missing AURORA_CLUSTER_ARN or AURORA_SECRET_ARN in environment variables")
 
-# Read migration file
-with open("migrations/001_schema.sql") as f:
-    sql = f.read()
+    client = boto3.client("rds-data", region_name=region)
 
-# Define statements in order (since splitting is complex)
-statements = [
-    # Extension
-    'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"',
-    # Tables
-    """CREATE TABLE IF NOT EXISTS users (
-        clerk_user_id VARCHAR(255) PRIMARY KEY,
-        display_name VARCHAR(255),
-        years_until_retirement INTEGER,
-        target_retirement_income DECIMAL(12,2),
-        asset_class_targets JSONB DEFAULT '{"equity": 70, "fixed_income": 30}',
-        region_targets JSONB DEFAULT '{"north_america": 50, "international": 50}',
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-    )""",
-    """CREATE TABLE IF NOT EXISTS instruments (
-        symbol VARCHAR(20) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        instrument_type VARCHAR(50),
-        current_price DECIMAL(12,4),
-        allocation_regions JSONB DEFAULT '{}',
-        allocation_sectors JSONB DEFAULT '{}',
-        allocation_asset_class JSONB DEFAULT '{}',
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-    )""",
-    """CREATE TABLE IF NOT EXISTS accounts (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        clerk_user_id VARCHAR(255) REFERENCES users(clerk_user_id) ON DELETE CASCADE,
-        account_name VARCHAR(255) NOT NULL,
-        account_purpose TEXT,
-        cash_balance DECIMAL(12,2) DEFAULT 0,
-        cash_interest DECIMAL(5,4) DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-    )""",
-    """CREATE TABLE IF NOT EXISTS positions (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        account_id UUID REFERENCES accounts(id) ON DELETE CASCADE,
-        symbol VARCHAR(20) REFERENCES instruments(symbol),
-        quantity DECIMAL(20,8) NOT NULL,
-        as_of_date DATE DEFAULT CURRENT_DATE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(account_id, symbol)
-    )""",
-    """CREATE TABLE IF NOT EXISTS jobs (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        clerk_user_id VARCHAR(255) REFERENCES users(clerk_user_id) ON DELETE CASCADE,
-        job_type VARCHAR(50) NOT NULL,
-        status VARCHAR(20) DEFAULT 'pending',
-        request_payload JSONB,
-        report_payload JSONB,
-        charts_payload JSONB,
-        retirement_payload JSONB,
-        summary_payload JSONB,
-        error_message TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        started_at TIMESTAMP,
-        completed_at TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT NOW()
-    )""",
-    # Indexes
-    "CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(clerk_user_id)",
-    "CREATE INDEX IF NOT EXISTS idx_positions_account ON positions(account_id)",
-    "CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol)",
-    "CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(clerk_user_id)",
-    "CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)",
-    # Function for timestamps
-    """CREATE OR REPLACE FUNCTION update_updated_at_column()
-    RETURNS TRIGGER AS $$
-    BEGIN
-        NEW.updated_at = NOW();
-        RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql""",
-    # Triggers
-    """CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()""",
-    """CREATE TRIGGER update_instruments_updated_at BEFORE UPDATE ON instruments
-        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()""",
-    """CREATE TRIGGER update_accounts_updated_at BEFORE UPDATE ON accounts
-        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()""",
-    """CREATE TRIGGER update_positions_updated_at BEFORE UPDATE ON positions
-        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()""",
-    """CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON jobs
-        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()""",
-]
+    target_statements = custom_statements if custom_statements is not None else load_migration_statements()
 
-print("🚀 Running database migrations...")
-print("=" * 50)
+    logger.info("Applying database schema statements...")
 
-success_count = 0
-error_count = 0
+    success_count = 0
+    error_count = 0
 
-for i, stmt in enumerate(statements, 1):
-    # Get a description of what we're creating
-    stmt_type = "statement"
-    if "CREATE TABLE" in stmt.upper():
-        stmt_type = "table"
-    elif "CREATE INDEX" in stmt.upper():
-        stmt_type = "index"
-    elif "CREATE TRIGGER" in stmt.upper():
-        stmt_type = "trigger"
-    elif "CREATE FUNCTION" in stmt.upper():
-        stmt_type = "function"
-    elif "CREATE EXTENSION" in stmt.upper():
-        stmt_type = "extension"
+    for i, stmt in enumerate(target_statements, 1):
+        # Get a description of what we're creating
+        stmt_type = "statement"
+        if "CREATE TABLE" in stmt.upper():
+            stmt_type = "table"
+        elif "CREATE INDEX" in stmt.upper():
+            stmt_type = "index"
+        elif "CREATE TRIGGER" in stmt.upper():
+            stmt_type = "trigger"
+        elif "CREATE FUNCTION" in stmt.upper():
+            stmt_type = "function"
+        elif "CREATE EXTENSION" in stmt.upper():
+            stmt_type = "extension"
 
-    # First non-empty line for display
-    first_line = next(l for l in stmt.split("\n") if l.strip())[:60]
-    print(f"\n[{i}/{len(statements)}] Creating {stmt_type}...")
-    print(f"    {first_line}...")
+        # First non-empty line for display
+        first_line = next(l for l in stmt.split("\n") if l.strip())[:60]
+        logger.info(f"[{i}/{len(target_statements)}] Creating {stmt_type}: {first_line}...")
 
-    try:
-        response = client.execute_statement(
-            resourceArn=cluster_arn, secretArn=secret_arn, database=database, sql=stmt
-        )
-        print(f"    ✅ Success")
-        success_count += 1
-
-    except ClientError as e:
-        error_msg = e.response["Error"]["Message"]
-        if "already exists" in error_msg.lower():
-            print(f"    ⚠️  Already exists (skipping)")
+        try:
+            client.execute_statement(
+                resourceArn=cluster_arn, secretArn=secret_arn, database=database, sql=stmt
+            )
+            logger.info(f"Successfully applied {stmt_type}")
             success_count += 1
-        else:
-            print(f"    ❌ Error: {error_msg[:100]}")
-            error_count += 1
 
-print("\n" + "=" * 50)
-print(f"Migration complete: {success_count} successful, {error_count} errors")
+        except ClientError as e:
+            error_msg = e.response.get("Error", {}).get("Message", "")
+            if "already exists" in error_msg.lower():
+                logger.warning(f"Statement already exists, skipping: {first_line}")
+                success_count += 1
+            else:
+                logger.error(f"Error executing statement: {error_msg[:100]}")
+                error_count += 1
 
-if error_count == 0:
-    print("\n✅ All migrations completed successfully!")
-    print("\n📝 Next steps:")
-    print("1. Load seed data: uv run seed_data.py")
-    print("2. Test database operations: uv run test_db.py")
-else:
-    print(f"\n⚠️  Some statements failed. Check errors above.")
+    logger.info(f"Schema setup complete: {success_count} successful, {error_count} errors")
+
+    if error_count == 0:
+        logger.info("All schema statements completed successfully!")
+    else:
+        logger.warning("Some schema statements failed. Check log output above.")
+
+    return success_count, error_count
+
+
+if __name__ == "__main__":
+    run_migrations()
+

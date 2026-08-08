@@ -103,6 +103,7 @@ def observe():
                 import time
 
                 logger.info("🔍 Observability: Waiting 10 seconds for flush to complete...")
+                # Sleep to catch up with lambda.
                 time.sleep(10)
 
                 logger.info("✅ Observability: Traces flushed successfully")

@@ -184,6 +184,7 @@ def main():
             "build",
             "--platform",
             "linux/amd64",
+            "--provenance=false",
             "-t",
             local_image,
             ".",

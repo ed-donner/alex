@@ -5,6 +5,7 @@ Provides database models, schemas, and Data API client
 
 from .client import DataAPIClient
 from .models import Database
+from .unlogged import UnloggedTableStore, UnloggedMarketCacheStore
 from .schemas import (
     # Types
     RegionType,
@@ -32,6 +33,8 @@ from .schemas import (
 __all__ = [
     'Database',
     'DataAPIClient',
+    'UnloggedTableStore',
+    'UnloggedMarketCacheStore',
     'InstrumentCreate',
     'UserCreate',
     'AccountCreate',

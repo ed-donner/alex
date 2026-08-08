@@ -5,6 +5,7 @@ Market data functions using polygon.io for fetching real-time prices.
 import logging
 from typing import Set
 from prices import get_share_price
+from cache import get_market_cache
 
 logger = logging.getLogger()
 
@@ -56,7 +57,7 @@ def update_instrument_prices(job_id: str, db) -> None:
 
 def update_prices_for_symbols(symbols: Set[str], db) -> None:
     """
-    Fetch and update prices for a set of symbols using polygon.io.
+    Fetch and update prices for a set of symbols using polygon.io with L1/L2 cache integration.
 
     Args:
         symbols: Set of ticker symbols to update
@@ -67,10 +68,22 @@ def update_prices_for_symbols(symbols: Set[str], db) -> None:
         return
 
     symbols_list = list(symbols)
+    cache = get_market_cache()
+
+    # Batch cache check
+    cached_batch = cache.get_many(symbols_list)
     price_map = {}
 
-    # Fetch price for each symbol using polygon.io
     for symbol in symbols_list:
+        sym_upper = symbol.upper()
+        if sym_upper in cached_batch and not cached_batch[sym_upper].is_expired():
+            price = cached_batch[sym_upper].price
+            price_map[symbol] = price
+            logger.info(f"Market: [CACHE HIT] Retrieved {symbol} price: ${price:.2f}")
+
+    # Fetch remaining missing symbols using get_share_price
+    missing_symbols = [s for s in symbols_list if s not in price_map]
+    for symbol in missing_symbols:
         try:
             price = get_share_price(symbol)
             if price > 0:
@@ -82,6 +95,7 @@ def update_prices_for_symbols(symbols: Set[str], db) -> None:
             logger.warning(f"Market: Could not fetch price for {symbol}: {e}")
 
     logger.info(f"Market: Retrieved prices for {len(price_map)}/{len(symbols_list)} symbols")
+
 
     # Update database with fetched prices
     for symbol, price in price_map.items():

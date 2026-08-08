@@ -28,6 +28,55 @@ from observability import observe
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+def validate_chart_data(chart_json: str) -> tuple[bool, str, Dict[Any, Any]]:
+    """
+    Validates that charter agent output is well-formed JSON with expected structure.
+    Returns (is_valid, error_message, parsed_data)
+    """
+    try:
+        # Parse JSON
+        data = json.loads(chart_json)
+
+        # Validate expected structure
+        required_keys = ["charts"]
+        if not all(key in data for key in required_keys):
+            return False, f"Missing required keys. Expected: {required_keys}", {}
+
+        # Validate charts array
+        if not isinstance(data["charts"], list):
+            return False, "Charts must be an array", {}
+
+        # Validate each chart
+        for i, chart in enumerate(data["charts"]):
+            if "type" not in chart:
+                return False, f"Chart {i} missing 'type' field", {}
+
+            if "data" not in chart:
+                return False, f"Chart {i} missing 'data' field", {}
+
+            # Validate chart data is array
+            if not isinstance(chart["data"], list):
+                return False, f"Chart {i} data must be an array", {}
+
+            # Validate data points have required fields based on chart type
+            if chart["type"] == "pie":
+                for point in chart["data"]:
+                    if "name" not in point or "value" not in point:
+                        return False, f"Pie chart data points must have 'name' and 'value'", {}
+            elif chart["type"] == "bar":
+                for point in chart["data"]:
+                    if "category" not in point:
+                        return False, f"Bar chart data points must have 'category'", {}
+
+        return True, "", data
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON from charter agent: {e}")
+        return False, f"Invalid JSON: {e}", {}
+    except Exception as e:
+        logger.error(f"Unexpected error validating chart data: {e}")
+        return False, f"Validation error: {e}", {}
+
 @retry(
     retry=retry_if_exception_type(RateLimitError),
     stop=stop_after_attempt(5),
@@ -53,7 +102,16 @@ async def run_charter_agent(job_id: str, portfolio_data: Dict[str, Any], db=None
             input=task,
             max_turns=5  # Reduced since we expect one-shot JSON response
         )
-        
+
+        # Validate output
+        is_valid, error_msg, parsed_data = validate_chart_data(result.final_output)
+        if not is_valid:
+            logger.error(f"Charter agent produced invalid output for job {job_id}: {error_msg}")
+            # return safe output
+            return json.dumps({
+                "charts": [],
+                "error": "Unable to generate charts at this time"
+            })
         # Extract and parse JSON from the output
         output = result.final_output
         logger.info(f"Charter: Agent completed, output length: {len(output) if output else 0}")

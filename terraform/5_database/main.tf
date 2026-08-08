@@ -104,6 +104,11 @@ resource "aws_security_group" "aurora" {
     Project = "alex"
     Part    = "5"
   }
+
+  # Prevents Terraform/CI from overwriting or deleting rules added in AWS Console GUI
+  lifecycle {
+    ignore_changes = [ingress]
+  }
 }
 
 # Aurora Serverless v2 Cluster
@@ -151,6 +156,7 @@ resource "aws_rds_cluster_instance" "aurora" {
   instance_class      = "db.serverless"
   engine              = aws_rds_cluster.aurora.engine
   engine_version      = aws_rds_cluster.aurora.engine_version
+  publicly_accessible = true
   
   performance_insights_enabled = false  # Save costs in development
   

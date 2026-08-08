@@ -5,43 +5,37 @@ Called by EventBridge on a schedule.
 import os
 import urllib.request
 import json
+import loguru
+import urllib
+from http import HTTPStatus
+from urllib.request import Request
+from typing import Any, Dict
 
+from config.constants import DEFAULT_LAMBDA_REQUEST_TIMEOUT
+
+_LOGGER = loguru.logger
 
 def handler(event, context):
     """Trigger the research endpoint on App Runner."""
     
     app_runner_url = os.environ.get('APP_RUNNER_URL')
     if not app_runner_url:
-        raise ValueError("APP_RUNNER_URL environment variable not set")
-    
-    # Remove any protocol if included
-    if app_runner_url.startswith('https://'):
-        app_runner_url = app_runner_url.replace('https://', '')
-    elif app_runner_url.startswith('http://'):
-        app_runner_url = app_runner_url.replace('http://', '')
-    
+        msg = "`APP_RUNNER_URL` environment variable not set"
+        _LOGGER.debug(msg)
+        raise ValueError(msg)
+
+    # Remove any extra protocol info
+    app_runner_url = _normalize_url(app_runner_url)
     url = f"https://{app_runner_url}/research"
-    
+
     try:
         # Create POST request with empty JSON body (agent will pick topic)
         data = json.dumps({}).encode('utf-8')
-        req = urllib.request.Request(
-            url, 
-            data=data,
-            method='POST',
-            headers={'Content-Type': 'application/json'}
+        return _trigger_lambda_request(
+            req=_make_request(url, data),
+            req_timeout=DEFAULT_LAMBDA_REQUEST_TIMEOUT
         )
-        
-        with urllib.request.urlopen(req, timeout=180) as response:
-            result = response.read().decode('utf-8')
-            print(f"Research triggered successfully: {result}")
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'message': 'Research triggered successfully',
-                    'result': result
-                })
-            }
+
     except Exception as e:
         print(f"Error triggering research: {str(e)}")
         return {
@@ -50,3 +44,65 @@ def handler(event, context):
                 'error': str(e)
             })
         }
+
+def _trigger_lambda_request(req: Request, req_timeout: int) -> Any | Dict:
+    """
+    Trigger the Lambda.
+
+    :param req: The request to trigger.
+    :param req_timeout: Timeout to send to aws sdk.
+
+    :return: Object payload of response.
+    :raise: Exception. Return runtime exceptions to the caller.
+    """
+    with urllib.request.urlopen(req, timeout=req_timeout) as response:
+        _LOGGER.info(f"Triggering lambda with timeout of f{req_timeout}")
+        _LOGGER.debug(f'Sending request f{req} with payload {req.data}')
+
+        result = response.read().decode('utf-8')
+
+        _LOGGER.info(f"Research triggered successfully: {result}")
+
+        return {
+            'statusCode': HTTPStatus.OK,
+            'body': json.dumps({
+                'message': 'Research triggered successfully',
+
+                'result': result
+            })
+        }
+
+
+def _make_request(url: str, data: bytes) -> Request:
+    """
+    Form and return a urllib Request object.
+
+    :param url: url.
+    :param data: Request body data, as bytes.
+    :return: The formed `Request`.
+    """
+    req: Request = urllib.request.Request(
+        url,
+        data=data,
+        method='POST',
+        headers={'Content-Type': 'application/json'}
+    )
+    return req
+
+
+def _normalize_url(url: str) -> str:
+    """
+    Normalize the URL by Removing any HTTPx identifiers
+    from the start of the url.
+
+    :param url: URL to normalize.
+    :return: Normalized URL, with HTTPx identifiers
+             from the start of the url,
+    or the url itself if it doesn't start with HTTPx.
+    """
+    if url.startswith('https://'):
+        return url.replace('https://', '')
+    elif url.startswith('http://'):
+        return url.replace('http://', '')
+    else:
+        raise ValueError('Invalid url scheme')

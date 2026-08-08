@@ -115,13 +115,15 @@ export default function Accounts() {
     };
   }, [loadAccounts]);
 
-  const populateTestData = async () => {
+  const [fetchLivePrices, setFetchLivePrices] = useState(false);
+
+  const populateTestData = async (fetchLive: boolean = fetchLivePrices) => {
     setPopulatingData(true);
     setMessage(null);
 
     try {
       const token = await getToken();
-      const response = await fetch(`${API_URL}/api/populate-test-data`, {
+      const response = await fetch(`${API_URL}/api/populate-test-data?fetch_live_prices=${fetchLive}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -131,7 +133,10 @@ export default function Accounts() {
 
       if (response.ok) {
         const data = await response.json();
-        setMessage({ type: 'success', text: data.message });
+        setMessage({
+          type: 'success',
+          text: fetchLive ? 'Test data populated with live Polygon prices!' : data.message,
+        });
         await loadAccounts(); // Reload accounts after population
       } else {
         setMessage({ type: 'error', text: 'Failed to populate test data' });
@@ -288,13 +293,24 @@ export default function Accounts() {
                 Add Account
               </button>
               {accounts.length === 0 && !loading && (
-                <button
-                  onClick={populateTestData}
-                  disabled={populatingData}
-                  className="bg-accent hover:bg-yellow-600 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {populatingData ? 'Populating...' : 'Populate Test Data'}
-                </button>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={fetchLivePrices}
+                      onChange={(e) => setFetchLivePrices(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <span>Live Polygon Prices</span>
+                  </label>
+                  <button
+                    onClick={() => populateTestData(fetchLivePrices)}
+                    disabled={populatingData}
+                    className="bg-accent hover:bg-yellow-600 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {populatingData ? 'Populating...' : fetchLivePrices ? 'Populate (Live Polygon)' : 'Populate Test Data'}
+                  </button>
+                </div>
               )}
               {accounts.length > 0 && (
                 <button

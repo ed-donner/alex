@@ -232,7 +232,9 @@ resource "aws_lambda_function" "planner" {
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
   timeout     = 900  # 15 minutes for planner
-  memory_size = 2048  # 2GB for planner
+  memory_size = 3008  # Max default allowed Lambda memory
+
+  # Reserved concurrency removed to avoid exceeding account concurrency limits
   
   environment {
     variables = {

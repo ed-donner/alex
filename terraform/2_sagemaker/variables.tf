@@ -3,10 +3,12 @@ variable "aws_region" {
   type        = string
 }
 
+# HF CPU Inference model
+# See https://huggingface.co/docs/sagemaker/main/en/dlcs/available#inference
 variable "sagemaker_image_uri" {
   description = "URI of the SageMaker container image"
   type        = string
-  default     = "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-inference:1.13.1-transformers4.26.0-cpu-py39-ubuntu20.04"
+  default     = "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-inference:2.6.0-transformers4.51.3-cpu-py312-ubuntu22.04"
 }
 
 variable "embedding_model_name" {

@@ -335,11 +335,21 @@ def display_deployment_info(outputs):
 
 def main():
     """Main deployment function."""
+    import argparse
+    parser = argparse.ArgumentParser(description="Deploy Alex Financial Advisor infrastructure and frontend.")
+    parser.add_argument("--frontend-only", action="store_true", help="Only build and deploy frontend assets to S3")
+    args = parser.parse_args()
+
     print("🚀 Alex Financial Advisor - Part 7 Deployment")
     print("=" * 50)
 
     # Check prerequisites
     check_prerequisites()
+
+    if args.frontend-only or "--frontend-only" in sys.argv:
+        from deploy_frontend import main as deploy_fe_main
+        deploy_fe_main()
+        return
 
     # Package Lambda
     package_lambda()

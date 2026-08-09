@@ -177,13 +177,19 @@ def main():
     remote_image = f"{ecr_url}:{image_tag}"
 
     # Build Docker image
+    # Use buildx with provenance/sbom disabled so Lambda accepts the image.
+    # Modern Docker Desktop (BuildKit) adds attestation manifests by default,
+    # which AWS Lambda rejects with "image manifest, config or layer media type is not supported".
     print(f"\nBuilding Docker image for linux/amd64 with tag: {image_tag}")
     run_command(
         [
             "docker",
+            "buildx",
             "build",
             "--platform",
             "linux/amd64",
+            "--provenance=false",
+            "--sbom=false",
             "-t",
             local_image,
             ".",

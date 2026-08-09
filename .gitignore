@@ -234,3 +234,4 @@ backend/**/*_lambda.zip
 .idea
 .terraform.lock.hcl
 /terraform/4_researcher/researcher.auto.tfvars.json
+.gastown-ignore

@@ -10,7 +10,7 @@ from typing import Any, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from agents import Agent, RunHooks, Runner, trace
+from agents import Agent, ModelSettings, RunHooks, Runner, trace
 from agents.extensions.models.litellm_model import LitellmModel
 
 # Suppress LiteLLM warnings about optional dependencies
@@ -84,7 +84,7 @@ async def run_research_agent(topic: str = None) -> str:
     os.environ["AWS_REGION"] = region
     os.environ["AWS_DEFAULT_REGION"] = region
     model_name = os.environ.get(
-        "RESEARCHER_MODEL", "bedrock/global.openai.gpt-oss-120b-1:0"
+        "RESEARCHER_MODEL", "bedrock/us.amazon.nova-2-lite-v1:0"
     )
     model = LitellmModel(model=model_name)
 
@@ -109,6 +109,11 @@ async def run_research_agent(topic: str = None) -> str:
                 model=model,
                 tools=[ingest_financial_document],
                 mcp_servers=[playwright_mcp],
+                # LiteLLM's Bedrock integration rejects the `tools` param by default.
+                # Explicitly allow it so the agent can use tools (function + MCP).
+                model_settings=ModelSettings(
+                    extra_args={"allowed_openai_params": ["tools"]}
+                ),
             )
 
             try:
@@ -207,7 +212,7 @@ async def health():
         "timestamp": datetime.now(UTC).isoformat(),
         "debug_container": container_indicators,
         "aws_region": os.environ.get("AWS_DEFAULT_REGION", "not set"),
-        "bedrock_model": "bedrock/amazon.nova-pro-v1:0",
+        "bedrock_model": "bedrock/amazon.nova-2-lite-v1:0",
         "mcp_logging_enabled": MCP_LOGGING_ENABLED,
     }
 

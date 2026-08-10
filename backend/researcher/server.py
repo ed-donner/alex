@@ -84,7 +84,7 @@ async def run_research_agent(topic: str = None) -> str:
     os.environ["AWS_REGION"] = region
     os.environ["AWS_DEFAULT_REGION"] = region
     model_name = os.environ.get(
-        "RESEARCHER_MODEL", "bedrock/us.amazon.nova-pro-v1:0"
+        "RESEARCHER_MODEL", "bedrock/us.amazon.nova-2-lite-v1:0"
     )
     model = LitellmModel(model=model_name)
 
@@ -212,7 +212,7 @@ async def health():
         "timestamp": datetime.now(UTC).isoformat(),
         "debug_container": container_indicators,
         "aws_region": os.environ.get("AWS_DEFAULT_REGION", "not set"),
-        "bedrock_model": "bedrock/amazon.nova-pro-v1:0",
+        "bedrock_model": "bedrock/amazon.nova-2-lite-v1:0",
         "mcp_logging_enabled": MCP_LOGGING_ENABLED,
     }
 

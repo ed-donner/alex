@@ -132,6 +132,7 @@ def lambda_handler(event, context):
 
     db = Database()
     user_id = None
+    job = None
     try:
         job = db.jobs.find_by_id(job_id)
         if job:
@@ -153,7 +154,7 @@ def lambda_handler(event, context):
             if not portfolio_data:
                 # Try to load from database
                 try:
-                    job = db.jobs.find_by_id(job_id)
+                    job = job or db.jobs.find_by_id(job_id)
                     if job:
                         user_id = job["clerk_user_id"]
                         user = db.users.find_by_clerk_id(user_id)

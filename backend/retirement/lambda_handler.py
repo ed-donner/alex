@@ -143,9 +143,11 @@ def lambda_handler(event, context):
         }
 
     user_id = None
+    job = None
+    db = None
     try:
-        db_for_trace = Database()
-        job = db_for_trace.jobs.find_by_id(job_id)
+        db = Database()
+        job = db.jobs.find_by_id(job_id)
         if job:
             user_id = job.get('clerk_user_id')
     except Exception as e:
@@ -166,12 +168,8 @@ def lambda_handler(event, context):
                 # Try to load from database
                 logger.info(f"Retirement Loading portfolio data for job {job_id}")
                 try:
-                    import sys
-                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-                    from src import Database
-
-                    db = Database()
-                    job = db.jobs.find_by_id(job_id)
+                    db = db or Database()
+                    job = job or db.jobs.find_by_id(job_id)
                     if job:
                         # portfolio_data = job.get('request_payload', {}).get('portfolio_data', {})
                         user_id = job['clerk_user_id']

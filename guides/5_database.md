@@ -121,6 +121,20 @@ Since Guide 4, we need additional AWS permissions for Aurora and related service
       "Resource": "*"
     },
     {
+      "Sid": "RDSServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "iam:AWSServiceName": [
+            "rds.amazonaws.com",
+            "rds.application-autoscaling.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
       "Sid": "EC2Permissions",
       "Effect": "Allow",
       "Action": [
@@ -148,8 +162,11 @@ Since Guide 4, we need additional AWS permissions for Aurora and related service
         "secretsmanager:DeleteSecret",
         "secretsmanager:DescribeSecret",
         "secretsmanager:GetSecretValue",
+        "secretsmanager:GetResourcePolicy",
         "secretsmanager:PutSecretValue",
-        "secretsmanager:UpdateSecret"
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:TagResource",
+        "secretsmanager:UntagResource"
       ],
       "Resource": "*"
     },

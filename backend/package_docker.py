@@ -9,6 +9,8 @@ import sys
 import subprocess
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8")
+
 
 def run_packaging(agent_name):
     """Run packaging for a specific agent."""

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from agents import Agent, RunHooks, Runner, trace
 from agents.extensions.models.litellm_model import LitellmModel
+from observability import observe, setup_instrumentation
 
 # Suppress LiteLLM warnings about optional dependencies
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +24,9 @@ from context import get_agent_instructions, DEFAULT_RESEARCH_PROMPT
 from mcp_servers import create_playwright_mcp_server
 from tools import ingest_financial_document
 
-# Load environment
+# Load environment before Langfuse initializes
 load_dotenv(override=True)
+setup_instrumentation()
 
 app = FastAPI(title="Alex Researcher Service")
 
@@ -71,6 +73,24 @@ async def run_research_agent(topic: str = None) -> str:
         query = f"Research this investment topic: {topic}"
     else:
         query = DEFAULT_RESEARCH_PROMPT
+
+    with observe(
+        name="research-market",
+        tags=["researcher", "market-research"],
+        metadata={"agent": "researcher"},
+        input={"topic": topic or "agent-selected"},
+    ) as obs:
+        try:
+            result = await _run_research_agent(topic, query)
+            obs.update(output={"status": "completed", "topic": topic or "agent-selected"})
+            return result
+        except Exception as e:
+            obs.update(output={"status": "failed", "error": str(e)})
+            raise
+
+
+async def _run_research_agent(topic: Optional[str], query: str) -> str:
+    """Inner research run, traced by run_research_agent()."""
 
     if MCP_LOGGING_ENABLED:
         logger.info(

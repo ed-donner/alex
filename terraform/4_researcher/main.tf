@@ -131,12 +131,17 @@ resource "aws_lambda_function" "researcher" {
 
   environment {
     variables = {
-      OPENAI_API_KEY    = var.openai_api_key
-      ALEX_API_ENDPOINT = var.alex_api_endpoint
-      ALEX_API_KEY      = var.alex_api_key
-      BEDROCK_REGION    = var.bedrock_region
-      RESEARCHER_MODEL  = var.researcher_model
-      MCP_LOGGING       = var.mcp_logging
+      OPENAI_API_KEY                 = var.openai_api_key
+      ALEX_API_ENDPOINT              = var.alex_api_endpoint
+      ALEX_API_KEY                   = var.alex_api_key
+      BEDROCK_REGION                 = var.bedrock_region
+      RESEARCHER_MODEL               = var.researcher_model
+      MCP_LOGGING                    = var.mcp_logging
+      LANGFUSE_PUBLIC_KEY            = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY            = var.langfuse_secret_key
+      LANGFUSE_HOST                  = var.langfuse_host
+      LANGFUSE_BASE_URL              = var.langfuse_host
+      LANGFUSE_TRACING_ENVIRONMENT   = "production"
     }
   }
 

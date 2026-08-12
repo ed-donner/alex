@@ -247,10 +247,12 @@ resource "aws_lambda_function" "planner" {
       POLYGON_API_KEY    = var.polygon_api_key
       POLYGON_PLAN       = var.polygon_plan
       # LangFuse observability (optional)
-      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
-      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
-      LANGFUSE_HOST       = var.langfuse_host
-      OPENAI_API_KEY      = var.openai_api_key
+      LANGFUSE_PUBLIC_KEY            = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY            = var.langfuse_secret_key
+      LANGFUSE_HOST                  = var.langfuse_host
+      LANGFUSE_BASE_URL              = var.langfuse_host
+      LANGFUSE_TRACING_ENVIRONMENT   = "production"
+      OPENAI_API_KEY                 = var.openai_api_key
     }
   }
 
@@ -294,10 +296,12 @@ resource "aws_lambda_function" "tagger" {
       BEDROCK_REGION     = var.bedrock_region
       DEFAULT_AWS_REGION = var.aws_region
       # LangFuse observability (optional)
-      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
-      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
-      LANGFUSE_HOST       = var.langfuse_host
-      OPENAI_API_KEY      = var.openai_api_key
+      LANGFUSE_PUBLIC_KEY            = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY            = var.langfuse_secret_key
+      LANGFUSE_HOST                  = var.langfuse_host
+      LANGFUSE_BASE_URL              = var.langfuse_host
+      LANGFUSE_TRACING_ENVIRONMENT   = "production"
+      OPENAI_API_KEY                 = var.openai_api_key
     }
   }
   
@@ -335,10 +339,12 @@ resource "aws_lambda_function" "reporter" {
       DEFAULT_AWS_REGION = var.aws_region
       SAGEMAKER_ENDPOINT = var.sagemaker_endpoint
       # LangFuse observability (optional)
-      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
-      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
-      LANGFUSE_HOST       = var.langfuse_host
-      OPENAI_API_KEY      = var.openai_api_key
+      LANGFUSE_PUBLIC_KEY            = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY            = var.langfuse_secret_key
+      LANGFUSE_HOST                  = var.langfuse_host
+      LANGFUSE_BASE_URL              = var.langfuse_host
+      LANGFUSE_TRACING_ENVIRONMENT   = "production"
+      OPENAI_API_KEY                 = var.openai_api_key
     }
   }
 
@@ -375,10 +381,12 @@ resource "aws_lambda_function" "charter" {
       BEDROCK_REGION     = var.bedrock_region
       DEFAULT_AWS_REGION = var.aws_region
       # LangFuse observability (optional)
-      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
-      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
-      LANGFUSE_HOST       = var.langfuse_host
-      OPENAI_API_KEY      = var.openai_api_key
+      LANGFUSE_PUBLIC_KEY            = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY            = var.langfuse_secret_key
+      LANGFUSE_HOST                  = var.langfuse_host
+      LANGFUSE_BASE_URL              = var.langfuse_host
+      LANGFUSE_TRACING_ENVIRONMENT   = "production"
+      OPENAI_API_KEY                 = var.openai_api_key
     }
   }
 
@@ -415,10 +423,12 @@ resource "aws_lambda_function" "retirement" {
       BEDROCK_REGION     = var.bedrock_region
       DEFAULT_AWS_REGION = var.aws_region
       # LangFuse observability (optional)
-      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
-      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
-      LANGFUSE_HOST       = var.langfuse_host
-      OPENAI_API_KEY      = var.openai_api_key
+      LANGFUSE_PUBLIC_KEY            = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY            = var.langfuse_secret_key
+      LANGFUSE_HOST                  = var.langfuse_host
+      LANGFUSE_BASE_URL              = var.langfuse_host
+      LANGFUSE_TRACING_ENVIRONMENT   = "production"
+      OPENAI_API_KEY                 = var.openai_api_key
     }
   }
 

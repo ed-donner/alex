@@ -114,7 +114,7 @@ def handle_missing_instruments(job_id: str, db) -> None:
             response = lambda_client.invoke(
                 FunctionName=TAGGER_FUNCTION,
                 InvocationType="RequestResponse",
-                Payload=json.dumps({"instruments": missing}),
+                Payload=json.dumps({"instruments": missing, "job_id": job_id}),
             )
 
             result = json.loads(response["Payload"].read())

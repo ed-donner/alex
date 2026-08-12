@@ -37,6 +37,6 @@ polygon_plan    = "free"
 
 # langfuse_public_key = "pk-lf-..." # Add your pk-lf-xxx key here - be sure this is the one that starts pk
 # langfuse_secret_key = "sk-lf-..." # Add your sk-lf-xxx key here - be sure this is the one that starts sk
-# langfuse_host       = "https://us.cloud.langfuse.com"
-# OpenAI API key (required for OpenAI Agents SDK tracing to work - no balance or spend needed)
+# langfuse_host       = "https://us.cloud.langfuse.com" # EU: https://cloud.langfuse.com
+# openai_api_key is optional; Bedrock agents do not need it for Langfuse tracing
 # openai_api_key = ""

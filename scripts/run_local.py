@@ -125,11 +125,23 @@ def start_backend():
         ["uv", "run", "main.py"],
         cwd=backend_dir,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # Combine stderr with stdout (main.py's logging goes to stderr)
         text=True,
         bufsize=1
     )
     processes.append(proc)
+
+    # Continuously drain the backend's output pipe. Without this, once the OS
+    # pipe buffer fills up (main.py's logging.basicConfig() defaults to
+    # stderr), the backend's next log call blocks forever, freezing its
+    # single-threaded event loop - and with it, every request including /health.
+    import threading
+
+    def read_backend_output():
+        for line in proc.stdout:
+            print(f"    Backend: {line.strip()}")
+
+    threading.Thread(target=read_backend_output, daemon=True).start()
 
     # Wait for backend to start
     print("  Waiting for backend to start...")
@@ -209,7 +221,7 @@ def start_frontend():
     print("  ❌ Frontend failed to start")
     cleanup()
 
-def monitor_processes(backend_proc, frontend_proc):
+def monitor_processes():
     """Monitor running processes and show their output"""
     print("\n" + "="*60)
     print("🎯 Alex Financial Advisor - Local Development")
@@ -229,15 +241,11 @@ def monitor_processes(backend_proc, frontend_proc):
 
     # Monitor processes
     while True:
-        # Backend stdout has no other reader. Frontend's stdout is already
-        # drained by the background thread started in start_frontend, so
-        # don't read it again here (that would race with that thread).
-        try:
-            line = backend_proc.stdout.readline()
-            if line:
-                print(f"[LOG] {line.strip()}")
-        except:
-            pass
+        # Both backend and frontend stdout are drained by their own background
+        # reader threads (started in start_backend/start_frontend), so this
+        # loop doesn't read their output itself - doing so would race with
+        # those threads and reintroduce the pipe-buffer deadlock they exist to
+        # prevent.
 
         # On Windows, the intermediate wrapper process (uv/cmd.exe) can exit
         # on its own while the real server underneath keeps running, so we
@@ -288,12 +296,12 @@ def main():
         subprocess.run(["uv", "add", "httpx"], check=True)
 
     # Start services
-    backend_proc = start_backend()
-    frontend_proc = start_frontend()
+    start_backend()
+    start_frontend()
 
     # Monitor processes
     try:
-        monitor_processes(backend_proc, frontend_proc)
+        monitor_processes()
     except KeyboardInterrupt:
         cleanup()
 

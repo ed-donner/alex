@@ -14,6 +14,12 @@ from pathlib import Path
 # On Windows, npm/node are .cmd files and need shell=True to be found
 IS_WINDOWS = sys.platform == "win32"
 
+# On Windows, stdout may default to a non-UTF-8 codepage (e.g. cp1252) when not
+# attached to a real console, which crashes on the emoji this script prints
+if IS_WINDOWS:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 # Track subprocesses for cleanup
 processes = []
 
@@ -22,7 +28,16 @@ def cleanup(signum=None, frame=None):
     print("\n🛑 Shutting down services...")
     for proc in processes:
         try:
-            proc.terminate()
+            if IS_WINDOWS:
+                # proc.terminate() only kills the immediate wrapper (uv/cmd.exe),
+                # leaving the real backend/frontend server as an orphan. Kill the
+                # whole process tree instead.
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True
+                )
+            else:
+                proc.terminate()
             proc.wait(timeout=5)
         except:
             proc.kill()
@@ -172,7 +187,11 @@ def start_frontend():
     reader = threading.Thread(target=read_output, daemon=True)
     reader.start()
 
-    for i in range(30):  # 30 second timeout
+    for i in range(90):  # 90 second timeout (cold Next.js starts can take ~30s)
+        if proc.poll() is not None:
+            print("  ❌ Frontend process exited unexpectedly (see output above)")
+            cleanup()
+
         if started_flag["started"] or i > 5:  # Start checking after 5 seconds
             try:
                 response = httpx.get("http://localhost:3000", timeout=1)
@@ -190,7 +209,7 @@ def start_frontend():
     print("  ❌ Frontend failed to start")
     cleanup()
 
-def monitor_processes():
+def monitor_processes(backend_proc, frontend_proc):
     """Monitor running processes and show their output"""
     print("\n" + "="*60)
     print("🎯 Alex Financial Advisor - Local Development")
@@ -202,21 +221,53 @@ def monitor_processes():
     print("\n📝 Logs will appear below. Press Ctrl+C to stop.\n")
     print("="*60 + "\n")
 
+    import httpx
+    last_health_check = 0.0
+    consecutive_backend_failures = 0
+    consecutive_frontend_failures = 0
+    FAILURE_THRESHOLD = 3  # require 3 consecutive misses before treating it as dead
+
     # Monitor processes
     while True:
-        for proc in processes:
-            # Check if process is still running
-            if proc.poll() is not None:
-                print(f"\n⚠️  A process has stopped unexpectedly!")
-                cleanup()
+        # Backend stdout has no other reader. Frontend's stdout is already
+        # drained by the background thread started in start_frontend, so
+        # don't read it again here (that would race with that thread).
+        try:
+            line = backend_proc.stdout.readline()
+            if line:
+                print(f"[LOG] {line.strip()}")
+        except:
+            pass
 
-            # Read any available output
+        # On Windows, the intermediate wrapper process (uv/cmd.exe) can exit
+        # on its own while the real server underneath keeps running, so we
+        # can't rely on proc.poll() to detect a crash. Poll the actual
+        # services instead. The backend does blocking AWS calls per-request,
+        # so a single slow health check under load isn't necessarily a crash -
+        # require several consecutive misses before shutting down.
+        now = time.time()
+        if now - last_health_check > 5:
+            last_health_check = now
+
             try:
-                line = proc.stdout.readline()
-                if line:
-                    print(f"[LOG] {line.strip()}")
-            except:
-                pass
+                backend_ok = httpx.get("http://localhost:8000/health", timeout=5).status_code == 200
+            except Exception:
+                backend_ok = False
+            consecutive_backend_failures = 0 if backend_ok else consecutive_backend_failures + 1
+
+            try:
+                httpx.get("http://localhost:3000", timeout=5)
+                frontend_ok = True
+            except httpx.ConnectError:
+                frontend_ok = False
+            except Exception:
+                frontend_ok = True  # any response at all means it's up
+            consecutive_frontend_failures = 0 if frontend_ok else consecutive_frontend_failures + 1
+
+            if consecutive_backend_failures >= FAILURE_THRESHOLD or consecutive_frontend_failures >= FAILURE_THRESHOLD:
+                dead = "Backend" if consecutive_backend_failures >= FAILURE_THRESHOLD else "Frontend"
+                print(f"\n⚠️  {dead} stopped responding!")
+                cleanup()
 
         time.sleep(0.1)
 
@@ -242,7 +293,7 @@ def main():
 
     # Monitor processes
     try:
-        monitor_processes()
+        monitor_processes(backend_proc, frontend_proc)
     except KeyboardInterrupt:
         cleanup()
 

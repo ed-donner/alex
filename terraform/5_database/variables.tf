@@ -12,5 +12,5 @@ variable "min_capacity" {
 variable "max_capacity" {
   description = "Maximum capacity for Aurora Serverless v2 (in ACUs)"
   type        = number
-  default     = 2
+  default     = 1.0
 }

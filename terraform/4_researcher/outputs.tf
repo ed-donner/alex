@@ -16,7 +16,7 @@ output "researcher_function_name" {
 output "scheduler_status" {
   description = "Status of the automated scheduler"
   value = !local.researcher_deployed ? "Disabled - deploy the researcher image first" : (
-    var.scheduler_enabled ? "Enabled - Running every 2 hours" : "Disabled"
+    var.scheduler_enabled ? "Enabled - Running ${var.schedule_expression}" : "Disabled"
   )
 }
 

@@ -250,11 +250,17 @@ resource "aws_scheduler_schedule" "research_schedule" {
     mode = "OFF"
   }
 
-  schedule_expression = "rate(2 hours)"
+  schedule_expression          = var.schedule_expression
+  schedule_expression_timezone = var.schedule_expression_timezone
 
   target {
     arn      = aws_lambda_function.scheduler_lambda[0].arn
     role_arn = aws_iam_role.eventbridge_role[0].arn
+
+    input = jsonencode({
+      schedule_expression          = var.schedule_expression
+      schedule_expression_timezone = var.schedule_expression_timezone
+    })
   }
 }
 

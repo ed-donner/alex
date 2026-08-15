@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Deploy all Part 6 Lambda functions to AWS using Terraform.
-This script ensures Lambda functions are properly updated by:
-1. Optionally packaging the Lambda functions
+Deploy all Lambda functions (Part 6 Agent Orchestra + Part 4 Researcher & Scheduler) to AWS using Terraform.
+This script ensures all Lambda functions are properly updated by:
+1. Optionally packaging the Lambda functions (including the scheduler Lambda)
 2. Tainting Lambda resources in Terraform to force recreation
-3. Running terraform apply to deploy with the latest code
+3. Running terraform apply to deploy both 6_agents and 4_researcher with the latest code
 
 Usage:
     cd backend
@@ -21,26 +21,29 @@ import os
 from pathlib import Path
 from typing import List, Tuple
 
+
 def taint_and_deploy_via_terraform() -> bool:
     """
-    Deploy Lambda functions using Terraform with forced recreation.
+    Deploy all Lambda functions using Terraform with forced recreation.
     
     Returns:
         True if successful, False otherwise
     """
-    # Change to terraform directory
-    terraform_dir = Path(__file__).parent.parent / "terraform" / "6_agents"
+    backend_dir = Path(__file__).parent
+    terraform_dir = backend_dir.parent / "terraform" / "6_agents"
+    researcher_tf_dir = backend_dir.parent / "terraform" / "4_researcher"
+    
     if not terraform_dir.exists():
         print(f"❌ Terraform directory not found: {terraform_dir}")
         return False
     
-    # Lambda function names to taint
+    # Lambda function names to taint in Part 6
     lambda_functions = ['planner', 'tagger', 'reporter', 'charter', 'retirement']
     
-    print("📌 Step 1: Tainting Lambda functions to force recreation...")
+    print("📌 Step 1: Tainting Agent Orchestra Lambda functions to force recreation...")
     print("-" * 50)
     
-    # Taint each Lambda function
+    # Taint each Agent Lambda function in Part 6
     for func in lambda_functions:
         print(f"   Tainting aws_lambda_function.{func}...")
         result = subprocess.run(
@@ -58,32 +61,67 @@ def taint_and_deploy_via_terraform() -> bool:
             print(f"      ⚠️ Warning: {result.stderr[:100]}")
     
     print()
-    print("🚀 Step 2: Running terraform apply...")
+    print("🚀 Step 2: Running terraform apply for 6_agents...")
     print("-" * 50)
     
-    # Run terraform apply
+    # Run terraform apply for Part 6
     result = subprocess.run(
         ['terraform', 'apply', '-auto-approve'],
         cwd=terraform_dir,
-        capture_output=False,  # Show output directly
+        capture_output=False,
         text=True
     )
     
-    if result.returncode == 0:
-        print()
-        print("✅ Terraform deployment completed successfully!")
-        return True
-    else:
-        print()
-        print("❌ Terraform deployment failed!")
+    if result.returncode != 0:
+        print("❌ Agent Orchestra Terraform deployment failed!")
         return False
+        
+    print("✅ Agent Orchestra Lambda deployment completed successfully!")
+
+    # Always deploy Scheduler and Researcher Lambda in Part 4
+    if researcher_tf_dir.exists():
+        print()
+        print("⏰ Step 3: Deploying Researcher & Scheduler Lambdas (4_researcher)...")
+        print("-" * 50)
+        
+        # Taint scheduler Lambda
+        print("   Tainting aws_lambda_function.scheduler_lambda...")
+        subprocess.run(
+            ['terraform', 'taint', 'aws_lambda_function.scheduler_lambda'],
+            cwd=researcher_tf_dir,
+            capture_output=True,
+            text=True
+        )
+        
+        # Taint researcher Lambda if deployed
+        subprocess.run(
+            ['terraform', 'taint', 'aws_lambda_function.researcher[0]'],
+            cwd=researcher_tf_dir,
+            capture_output=True,
+            text=True
+        )
+
+        res = subprocess.run(
+            ['terraform', 'apply', '-auto-approve'],
+            cwd=researcher_tf_dir,
+            capture_output=False,
+            text=True
+        )
+        if res.returncode == 0:
+            print("✅ Researcher & Scheduler Lambdas deployed successfully!")
+        else:
+            print("⚠️ Researcher/Scheduler deployment failed!")
+            return False
+
+    return True
+
 
 def package_lambda(service_name: str, service_dir: Path) -> bool:
     """
-    Package a Lambda function using package_docker.py.
+    Package a Lambda function using package_docker.py or package_scheduler.py.
     
     Args:
-        service_name: Name of the service (e.g., 'planner')
+        service_name: Name of the service (e.g., 'planner', 'scheduler')
         service_dir: Path to the service directory
         
     Returns:
@@ -91,26 +129,32 @@ def package_lambda(service_name: str, service_dir: Path) -> bool:
     """
     print(f"   📦 Packaging {service_name}...")
     
-    package_script = service_dir / 'package_docker.py'
+    if service_name == 'scheduler':
+        package_script = service_dir.parent / 'package_scheduler.py'
+        cmd = ['uv', 'run', 'package_scheduler.py']
+        exec_dir = service_dir.parent
+    else:
+        package_script = service_dir / 'package_docker.py'
+        cmd = ['uv', 'run', 'package_docker.py']
+        exec_dir = service_dir
+
     if not package_script.exists():
-        print(f"      ✗ package_docker.py not found in {service_dir}")
+        print(f"      ✗ Packaging script not found at {package_script}")
         return False
     
     try:
-        # Run uv run package_docker.py in the service directory
         result = subprocess.run(
-            ['uv', 'run', 'package_docker.py'],
-            cwd=service_dir,
+            cmd,
+            cwd=exec_dir,
             capture_output=True,
             text=True
         )
         
         if result.returncode == 0:
-            # Check if zip was created
-            zip_path = service_dir / f'{service_name}_lambda.zip'
+            zip_path = service_dir / 'lambda_function.zip' if service_name == 'scheduler' else service_dir / f'{service_name}_lambda.zip'
             if zip_path.exists():
                 size_mb = zip_path.stat().st_size / (1024 * 1024)
-                print(f"      ✓ Created {size_mb:.1f} MB package")
+                print(f"      ✓ Created {size_mb:.1f} MB package ({zip_path.name})")
                 return True
             else:
                 print(f"      ✗ Package not created")
@@ -120,18 +164,17 @@ def package_lambda(service_name: str, service_dir: Path) -> bool:
             return False
             
     except Exception as e:
-        print(f"      ✗ Error running package_docker.py: {e}")
+        print(f"      ✗ Error running packaging script: {e}")
         return False
+
 
 def main():
     """Main deployment function."""
-    # Check for --package flag
     force_package = '--package' in sys.argv
     
-    print("🎯 Deploying Alex Agent Lambda Functions (via Terraform)")
-    print("=" * 50)
+    print("🎯 Deploying All Alex Lambda Functions (Part 6 Agents + Part 4 Researcher/Scheduler)")
+    print("=" * 70)
     
-    # Get AWS account ID
     try:
         sts_client = boto3.client('sts')
         account_id = sts_client.get_caller_identity()['Account']
@@ -145,7 +188,6 @@ def main():
     
     print()
     
-    # Define Lambda functions to check/package
     backend_dir = Path(__file__).parent
     services = [
         ('planner', backend_dir / 'planner' / 'planner_lambda.zip'),
@@ -153,9 +195,9 @@ def main():
         ('reporter', backend_dir / 'reporter' / 'reporter_lambda.zip'),
         ('charter', backend_dir / 'charter' / 'charter_lambda.zip'),
         ('retirement', backend_dir / 'retirement' / 'retirement_lambda.zip'),
+        ('scheduler', backend_dir / 'scheduler' / 'lambda_function.zip'),
     ]
     
-    # Check if packages exist and optionally package them
     print("📋 Checking deployment packages...")
     services_to_package = []
     
@@ -163,7 +205,6 @@ def main():
         service_dir = backend_dir / service_name
         
         if force_package:
-            # Force re-packaging all services
             services_to_package.append((service_name, service_dir))
             print(f"   ⟳ {service_name}: Will re-package")
         elif zip_path.exists():
@@ -173,7 +214,6 @@ def main():
             print(f"   ✗ {service_name}: Not found")
             services_to_package.append((service_name, service_dir))
     
-    # Package missing or all services if requested
     if services_to_package:
         print()
         print("📦 Packaging Lambda functions...")
@@ -186,36 +226,22 @@ def main():
         if failed_packages:
             print()
             print(f"❌ Failed to package: {', '.join(failed_packages)}")
-            print("   Make sure Docker is running and package_docker.py exists")
+            print("   Make sure Docker/Poetry is available")
             response = input("Continue anyway? (y/N): ")
             if response.lower() != 'y':
                 sys.exit(1)
     
     print()
     
-    # Deploy via Terraform with forced recreation
     if taint_and_deploy_via_terraform():
         print()
-        print("🎉 All Lambda functions deployed successfully!")
-        print()
-        print("⚠️  IMPORTANT: Lambda functions were FORCE RECREATED")
-        print("   This ensures your latest code is running in AWS")
-        print()
-        print("Next steps:")
-        print("   1. Test locally: cd <service> && uv run test_simple.py")
-        print("   2. Run integration test: cd backend && uv run test_full.py")
-        print("   3. Monitor CloudWatch Logs for each function")
+        print("🎉 All Alex Lambda functions deployed successfully!")
         sys.exit(0)
     else:
         print()
         print("❌ Deployment failed!")
-        print()
-        print("💡 Troubleshooting tips:")
-        print("   1. Check terraform output for errors")
-        print("   2. Ensure all packages exist (use --package flag)")
-        print("   3. Verify AWS credentials and permissions")
-        print("   4. Check terraform state: cd terraform/6_agents && terraform plan")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

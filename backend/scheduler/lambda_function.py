@@ -17,6 +17,7 @@ _LOGGER = loguru.logger
 
 def handler(event, context):
     """Trigger the research endpoint on App Runner."""
+    _LOGGER.info(f"Received scheduler trigger event: {event}")
     
     app_runner_url = os.environ.get('APP_RUNNER_URL')
     if not app_runner_url:
@@ -29,8 +30,15 @@ def handler(event, context):
     url = f"https://{app_runner_url}/research"
 
     try:
-        # Create POST request with empty JSON body (agent will pick topic)
-        data = json.dumps({}).encode('utf-8')
+        # Extract schedule context passed from EventBridge target payload
+        schedule_context = {}
+        if isinstance(event, dict):
+            if "schedule_expression" in event:
+                schedule_context["schedule_expression"] = event["schedule_expression"]
+            if "schedule_expression_timezone" in event:
+                schedule_context["schedule_expression_timezone"] = event["schedule_expression_timezone"]
+
+        data = json.dumps(schedule_context).encode('utf-8')
         return _trigger_lambda_request(
             req=_make_request(url, data),
             req_timeout=DEFAULT_LAMBDA_REQUEST_TIMEOUT

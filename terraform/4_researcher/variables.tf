@@ -49,3 +49,15 @@ variable "mcp_logging" {
   type        = string
   default     = "False"
 }
+
+variable "schedule_expression" {
+  description = "Schedule expression for the automated research scheduler"
+  type        = string
+  default     = "cron(0 17 * * ? *)"
+}
+
+variable "schedule_expression_timezone" {
+  description = "Timezone for the schedule expression"
+  type        = string
+  default     = "America/Los_Angeles"
+}

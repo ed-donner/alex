@@ -49,3 +49,22 @@ variable "mcp_logging" {
   type        = string
   default     = "False"
 }
+
+variable "langfuse_public_key" {
+  description = "Langfuse public key for observability (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "langfuse_secret_key" {
+  description = "Langfuse secret key for observability (optional)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "langfuse_host" {
+  description = "Langfuse host URL (optional)"
+  type        = string
+  default     = "https://us.cloud.langfuse.com"
+}

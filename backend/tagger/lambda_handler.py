@@ -105,27 +105,36 @@ def lambda_handler(event, context):
         ]
     }
     """
-    # Wrap entire handler with observability context
-    with observe():
+    instruments = event.get('instruments', [])
+    job_id = event.get('job_id')
+    symbols = [item.get('symbol', '') for item in instruments if isinstance(item, dict)]
+
+    if not instruments:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': 'No instruments provided'})
+        }
+
+    with observe(
+        name="tag-instruments",
+        session_id=job_id,
+        tags=["tagger", "instrument-classification"],
+        metadata={"agent": "tagger"},
+        input={"job_id": job_id, "symbols": symbols},
+    ) as obs:
         try:
-            # Parse the event
-            instruments = event.get('instruments', [])
-
-            if not instruments:
-                return {
-                    'statusCode': 400,
-                    'body': json.dumps({'error': 'No instruments provided'})
-                }
-
-            # Process all instruments in a single async context
             result = asyncio.run(process_instruments(instruments))
-
+            obs.update(output={
+                "tagged": result.get("tagged", 0),
+                "updated": result.get("updated", []),
+            })
             return {
                 'statusCode': 200,
                 'body': json.dumps(result)
             }
 
         except Exception as e:
+            obs.update(output={"error": str(e)})
             logger.error(f"Lambda handler error: {e}")
             return {
                 'statusCode': 500,

@@ -130,39 +130,47 @@ def lambda_handler(event, context):
         "portfolio_data": {...}  # Optional, will load from DB if not provided
     }
     """
-    # Wrap entire handler with observability context
-    with observe() as observability:
+    if isinstance(event, str):
+        event = json.loads(event)
+
+    logger.info(f"Retirement Lambda invoked with event: {json.dumps(event)[:500]}")
+
+    job_id = event.get('job_id')
+    if not job_id:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': 'job_id is required'})
+        }
+
+    user_id = None
+    job = None
+    db = None
+    try:
+        db = Database()
+        job = db.jobs.find_by_id(job_id)
+        if job:
+            user_id = job.get('clerk_user_id')
+    except Exception as e:
+        logger.warning(f"Retirement: Could not load job owner for tracing: {e}")
+
+    with observe(
+        name="project-retirement",
+        user_id=user_id,
+        session_id=job_id,
+        tags=["retirement", "portfolio-analysis"],
+        metadata={"agent": "retirement"},
+        input={"job_id": job_id},
+    ) as observability:
         try:
-            logger.info(f"Retirement Lambda invoked with event: {json.dumps(event)[:500]}")
-
-            # Parse event
-            if isinstance(event, str):
-                event = json.loads(event)
-
-            job_id = event.get('job_id')
-            if not job_id:
-                return {
-                    'statusCode': 400,
-                    'body': json.dumps({'error': 'job_id is required'})
-                }
 
             portfolio_data = event.get('portfolio_data')
             if not portfolio_data:
                 # Try to load from database
                 logger.info(f"Retirement Loading portfolio data for job {job_id}")
                 try:
-                    import sys
-                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-                    from src import Database
-
-                    db = Database()
-                    job = db.jobs.find_by_id(job_id)
+                    db = db or Database()
+                    job = job or db.jobs.find_by_id(job_id)
                     if job:
-                        if observability:
-                            observability.create_event(
-                                name="Retirement Started!", status_message="OK"
-                            )
-                        
                         # portfolio_data = job.get('request_payload', {}).get('portfolio_data', {})
                         user_id = job['clerk_user_id']
                         user = db.users.find_by_clerk_id(user_id)
@@ -216,13 +224,14 @@ def lambda_handler(event, context):
             result = asyncio.run(run_retirement_agent(job_id, portfolio_data))
 
             logger.info(f"Retirement completed for job {job_id}")
-
+            observability.update(output={"status": "completed", "job_id": job_id})
             return {
                 'statusCode': 200,
                 'body': json.dumps(result)
             }
 
         except Exception as e:
+            observability.update(output={"status": "failed", "error": str(e)})
             logger.error(f"Error in retirement: {e}", exc_info=True)
             return {
                 'statusCode': 500,

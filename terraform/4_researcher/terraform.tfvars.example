@@ -15,3 +15,8 @@ alex_api_key = "your-api-key-here"
 
 # Enable automated research scheduler (optional, default is false)
 scheduler_enabled = false
+
+# Langfuse observability (optional)
+# langfuse_public_key = "pk-lf-..."
+# langfuse_secret_key = "sk-lf-..."
+# langfuse_host       = "https://us.cloud.langfuse.com"

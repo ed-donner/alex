@@ -134,31 +134,44 @@ def lambda_handler(event, context):
         "portfolio_data": {...}
     }
     """
-    # Wrap entire handler with observability context
-    with observe():
+    if isinstance(event, str):
+        event = json.loads(event)
+
+    logger.info(f"Charter Lambda invoked with event keys: {list(event.keys()) if isinstance(event, dict) else 'not a dict'}")
+
+    job_id = event.get('job_id')
+    if not job_id:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': 'job_id is required'})
+        }
+
+    db = Database()
+    user_id = None
+    job = None
+    try:
+        job = db.jobs.find_by_id(job_id)
+        if job:
+            user_id = job.get('clerk_user_id')
+    except Exception as e:
+        logger.warning(f"Charter: Could not load job owner for tracing: {e}")
+
+    with observe(
+        name="chart-portfolio",
+        user_id=user_id,
+        session_id=job_id,
+        tags=["charter", "portfolio-analysis"],
+        metadata={"agent": "charter"},
+        input={"job_id": job_id},
+    ) as obs:
         try:
-            logger.info(f"Charter Lambda invoked with event keys: {list(event.keys()) if isinstance(event, dict) else 'not a dict'}")
-
-            # Parse event
-            if isinstance(event, str):
-                event = json.loads(event)
-
-            job_id = event.get('job_id')
-            if not job_id:
-                return {
-                    'statusCode': 400,
-                    'body': json.dumps({'error': 'job_id is required'})
-                }
-
-            # Initialize database first
-            db = Database()
 
             portfolio_data = event.get('portfolio_data')
             if not portfolio_data:
                 # Load portfolio data from database (like Reporter does)
                 logger.info(f"Charter: Loading portfolio data for job {job_id}")
                 try:
-                    job = db.jobs.find_by_id(job_id)
+                    job = job or db.jobs.find_by_id(job_id)
                     if job:
                         user_id = job['clerk_user_id']
                         user = db.users.find_by_clerk_id(user_id)
@@ -212,13 +225,17 @@ def lambda_handler(event, context):
             result = asyncio.run(run_charter_agent(job_id, portfolio_data, db))
 
             logger.info(f"Charter completed for job {job_id}: {result}")
-
+            obs.update(output={
+                "status": "completed" if result.get("success") else "failed",
+                "charts_generated": result.get("charts_generated", 0),
+            })
             return {
                 'statusCode': 200,
                 'body': json.dumps(result)
             }
 
         except Exception as e:
+            obs.update(output={"status": "failed", "error": str(e)})
             logger.error(f"Error in charter: {e}", exc_info=True)
             return {
                 'statusCode': 500,

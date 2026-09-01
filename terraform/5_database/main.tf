@@ -38,7 +38,7 @@ resource "random_password" "db_password" {
 resource "aws_secretsmanager_secret" "db_credentials" {
   name                    = "alex-aurora-credentials-${random_id.suffix.hex}"
   recovery_window_in_days = 0  # For development - immediate deletion
-  
+
   tags = {
     Project = "alex"
     Part    = "5"

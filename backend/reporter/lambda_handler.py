@@ -70,13 +70,21 @@ async def run_reporter_agent(
         response = result.final_output
 
         if observability:
-            with observability.start_as_current_span(name="judge") as span:
+            with observability.start_evaluator(
+                "evaluate-report",
+                input={"job_id": job_id},
+            ) as evaluator:
                 evaluation = await evaluate(REPORTER_INSTRUCTIONS, task, response)
                 score = evaluation.score / 100
                 comment = evaluation.feedback
-                span.score(name="Judge", value=score, data_type="NUMERIC", comment=comment)
-                observation = f"Score: {score} - Feedback: {comment}"
-                observability.create_event(name="Judge Event", status_message=observation)
+                if evaluator is not None:
+                    evaluator.update(output={"score": score, "feedback": comment})
+                    evaluator.score(
+                        name="judge",
+                        value=score,
+                        data_type="NUMERIC",
+                        comment=comment,
+                    )
                 if score < GUARD_AGAINST_SCORE:
                     logger.error(f"Reporter score is too low: {score}")
                     response = "I'm sorry, I'm not able to generate a report for you. Please try again later."
@@ -113,34 +121,42 @@ def lambda_handler(event, context):
         "user_data": {...}
     }
     """
-    # Wrap entire handler with observability context
-    with observe() as observability:
+    if isinstance(event, str):
+        event = json.loads(event)
+
+    logger.info(f"Reporter Lambda invoked with event: {json.dumps(event)[:500]}")
+
+    job_id = event.get("job_id")
+    if not job_id:
+        return {"statusCode": 400, "body": json.dumps({"error": "job_id is required"})}
+
+    db = Database()
+    user_id = None
+    job = None
+    try:
+        job = db.jobs.find_by_id(job_id)
+        if job:
+            user_id = job.get("clerk_user_id")
+    except Exception as e:
+        logger.warning(f"Reporter: Could not load job owner for tracing: {e}")
+
+    with observe(
+        name="report-portfolio",
+        user_id=user_id,
+        session_id=job_id,
+        tags=["reporter", "portfolio-analysis"],
+        metadata={"agent": "reporter"},
+        input={"job_id": job_id},
+    ) as observability:
         try:
-            logger.info(f"Reporter Lambda invoked with event: {json.dumps(event)[:500]}")
-
-            # Parse event
-            if isinstance(event, str):
-                event = json.loads(event)
-
-            job_id = event.get("job_id")
-            if not job_id:
-                return {"statusCode": 400, "body": json.dumps({"error": "job_id is required"})}
-
-            # Initialize database
-            db = Database()
 
             portfolio_data = event.get("portfolio_data")
             if not portfolio_data:
                 # Try to load from database
                 try:
-                    job = db.jobs.find_by_id(job_id)
+                    job = job or db.jobs.find_by_id(job_id)
                     if job:
                         user_id = job["clerk_user_id"]
-
-                        if observability:
-                            observability.create_event(
-                                name="Reporter Started!", status_message="OK"
-                            )
                         user = db.users.find_by_clerk_id(user_id)
                         accounts = db.accounts.find_by_user(user_id)
 
@@ -186,11 +202,6 @@ def lambda_handler(event, context):
                 try:
                     job = db.jobs.find_by_id(job_id)
                     if job and job.get("clerk_user_id"):
-                        status = f"Job ID: {job_id} Clerk User ID: {job['clerk_user_id']}"
-                        if observability:
-                            observability.create_event(
-                                name="Reporter about to run", status_message=status
-                            )
                         user = db.users.find_by_clerk_id(job["clerk_user_id"])
                         if user:
                             user_data = {
@@ -214,10 +225,11 @@ def lambda_handler(event, context):
             )
 
             logger.info(f"Reporter completed for job {job_id}")
-
+            observability.update(output={"status": "completed", "job_id": job_id})
             return {"statusCode": 200, "body": json.dumps(result)}
 
         except Exception as e:
+            observability.update(output={"status": "failed", "error": str(e)})
             logger.error(f"Error in reporter: {e}", exc_info=True)
             return {"statusCode": 500, "body": json.dumps({"success": False, "error": str(e)})}
 

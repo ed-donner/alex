@@ -184,7 +184,6 @@ def main():
             "build",
             "--platform",
             "linux/amd64",
-            "--provenance=false", # remove attestation to ensure single image manifest rquired for lambda container
             "-t",
             local_image,
             ".",

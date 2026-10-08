@@ -1,0 +1,9 @@
+[project]
+name = "alex-bootstrap"
+version = "0.1.0"
+description = "Bootstrap scripts for Alex Aurora Express cluster setup"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.40.8",
+    "tenacity>=9.1.4",
+]
